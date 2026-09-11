@@ -1,0 +1,462 @@
+{
+  "substitute": [
+    {
+      "name": "bare",
+      "text": "SELECT :name",
+      "variables": {
+        "name": "x"
+      },
+      "text_out": "SELECT x",
+      "unset": {}
+    },
+    {
+      "name": "literal-quoted",
+      "text": "SELECT :'path'",
+      "variables": {
+        "path": "in.mp4"
+      },
+      "text_out": "SELECT 'in.mp4'",
+      "unset": {}
+    },
+    {
+      "name": "literal-quote-escaped",
+      "text": "SELECT :'label'",
+      "variables": {
+        "label": "it's fine"
+      },
+      "text_out": "SELECT 'it''s fine'",
+      "unset": {}
+    },
+    {
+      "name": "identifier-quoted",
+      "text": "SELECT :\"col\" FROM t",
+      "variables": {
+        "col": "od\"d"
+      },
+      "text_out": "SELECT \"od\"\"d\" FROM t",
+      "unset": {}
+    },
+    {
+      "name": "cast-passthrough",
+      "text": "SELECT 1::int, :x::text",
+      "variables": {
+        "x": "9"
+      },
+      "text_out": "SELECT 1::int, 9::text",
+      "unset": {}
+    },
+    {
+      "name": "lone-colon",
+      "text": "SELECT a : b, :-(",
+      "variables": {
+        "a": "1"
+      },
+      "text_out": "SELECT a : b, :-(",
+      "unset": {}
+    },
+    {
+      "name": "inside-string",
+      "text": "SELECT ':name', :name",
+      "variables": {
+        "name": "v"
+      },
+      "text_out": "SELECT ':name', v",
+      "unset": {}
+    },
+    {
+      "name": "inside-identifier",
+      "text": "SELECT \":name\", :name",
+      "variables": {
+        "name": "v"
+      },
+      "text_out": "SELECT \":name\", v",
+      "unset": {}
+    },
+    {
+      "name": "doubled-quote-in-string",
+      "text": "SELECT 'it''s :name', :name",
+      "variables": {
+        "name": "v"
+      },
+      "text_out": "SELECT 'it''s :name', v",
+      "unset": {}
+    },
+    {
+      "name": "line-comment",
+      "text": "-- :name here\nSELECT :name",
+      "variables": {
+        "name": "v"
+      },
+      "text_out": "-- :name here\nSELECT v",
+      "unset": {}
+    },
+    {
+      "name": "block-comment",
+      "text": "/* :name */ SELECT :name",
+      "variables": {
+        "name": "v"
+      },
+      "text_out": "/* :name */ SELECT v",
+      "unset": {}
+    },
+    {
+      "name": "unclosed-string",
+      "text": "SELECT 'oops :name",
+      "variables": {
+        "name": "v"
+      },
+      "text_out": "SELECT 'oops :name",
+      "unset": {}
+    },
+    {
+      "name": "unset-null",
+      "text": "SELECT :missing",
+      "variables": {},
+      "text_out": "SELECT NULL",
+      "unset": {
+        "1:8": "missing"
+      }
+    },
+    {
+      "name": "unset-multiline",
+      "text": "SELECT 1,\n  2,\n  :gone, :also\n",
+      "variables": {},
+      "text_out": "SELECT 1,\n  2,\n  NULL, NULL\n",
+      "unset": {
+        "3:3": "gone",
+        "3:9": "also"
+      }
+    },
+    {
+      "name": "unset-mixed",
+      "text": "SELECT :'a', :b, :\"c\"",
+      "variables": {
+        "b": "set"
+      },
+      "text_out": "SELECT NULL, set, NULL",
+      "unset": {
+        "1:8": "a",
+        "1:19": "c"
+      }
+    },
+    {
+      "name": "subscript-int-bare",
+      "text": "SELECT :list[2]",
+      "variables": {
+        "list": "a,b,c"
+      },
+      "text_out": "SELECT b",
+      "unset": {}
+    },
+    {
+      "name": "subscript-int-literal",
+      "text": "SELECT :'list'[1]",
+      "variables": {
+        "list": "a,b's,c"
+      },
+      "text_out": "SELECT 'a'",
+      "unset": {}
+    },
+    {
+      "name": "subscript-int-identifier",
+      "text": "SELECT :\"list\"[3]",
+      "variables": {
+        "list": "a,b,c"
+      },
+      "text_out": "SELECT \"c\"",
+      "unset": {}
+    },
+    {
+      "name": "subscript-column-bare",
+      "text": "SELECT :widths[i.i]",
+      "variables": {
+        "widths": "10,20,30"
+      },
+      "text_out": "SELECT ARRAY[10,20,30][i.i]",
+      "unset": {}
+    },
+    {
+      "name": "subscript-column-literal",
+      "text": "SELECT :'names'[r.k]",
+      "variables": {
+        "names": "a,b's,c"
+      },
+      "text_out": "SELECT ARRAY['a','b''s','c'][r.k]",
+      "unset": {}
+    },
+    {
+      "name": "subscript-unset",
+      "text": "SELECT :nope[2]",
+      "variables": {},
+      "text_out": "SELECT NULL",
+      "unset": {
+        "1:8": "nope"
+      }
+    },
+    {
+      "name": "subscript-spaces",
+      "text": "SELECT :list[ 2 ]",
+      "variables": {
+        "list": "a,b,c"
+      },
+      "text_out": "SELECT b",
+      "unset": {}
+    },
+    {
+      "name": "subscript-no-close",
+      "text": "SELECT :list[2",
+      "variables": {
+        "list": "a,b,c"
+      },
+      "text_out": "SELECT a,b,c[2",
+      "unset": {}
+    },
+    {
+      "name": "subscript-newline-body",
+      "text": "SELECT :list[2\n]",
+      "variables": {
+        "list": "a,b,c"
+      },
+      "text_out": "SELECT a,b,c[2\n]",
+      "unset": {}
+    },
+    {
+      "name": "subscript-zero",
+      "text": "SELECT :list[0]",
+      "variables": {
+        "list": "a,b,c"
+      },
+      "refusal": {
+        "message": "':list[0]' subscripts below the start of the list",
+        "hint": "list subscripts are 1-based: :list[1] is the first element",
+        "line": 1,
+        "col": 8
+      }
+    },
+    {
+      "name": "subscript-past-end",
+      "text": "SELECT :list[4]",
+      "variables": {
+        "list": "a,b,c"
+      },
+      "refusal": {
+        "message": "':list[4]' is past the end: the list has 3 elements",
+        "hint": "-v list=... splits on commas; subscript from 1 to 3",
+        "line": 1,
+        "col": 8
+      }
+    },
+    {
+      "name": "subscript-past-end-one",
+      "text": "SELECT :one[2]",
+      "variables": {
+        "one": "solo"
+      },
+      "refusal": {
+        "message": "':one[2]' is past the end: the list has 1 element",
+        "hint": "-v one=... splits on commas; subscript from 1 to 1",
+        "line": 1,
+        "col": 8
+      }
+    },
+    {
+      "name": "subscript-column-identifier",
+      "text": "SELECT :\"cols\"[i.i]",
+      "variables": {
+        "cols": "a,b"
+      },
+      "refusal": {
+        "message": "':\"cols\"[i.i]' picks an identifier per row",
+        "hint": "an identifier is a compile-time name, so its subscript must be an integer literal, e.g. :\"cols\"[1]",
+        "line": 1,
+        "col": 8
+      }
+    },
+    {
+      "name": "subscript-bad-body",
+      "text": "SELECT :list[x]",
+      "variables": {
+        "list": "a,b"
+      },
+      "refusal": {
+        "message": "':list[x]' is not a list subscript",
+        "hint": "a list subscript is a positive integer literal or a row column, e.g. :list[1] or :list[i.i]",
+        "line": 1,
+        "col": 8
+      }
+    },
+    {
+      "name": "subscript-bad-body-neg",
+      "text": "SELECT :list[-1]",
+      "variables": {
+        "list": "a,b"
+      },
+      "refusal": {
+        "message": "':list[-1]' is not a list subscript",
+        "hint": "a list subscript is a positive integer literal or a row column, e.g. :list[1] or :list[i.i]",
+        "line": 1,
+        "col": 8
+      }
+    },
+    {
+      "name": "comma-value-no-subscript",
+      "text": "SELECT :list",
+      "variables": {
+        "list": "a,b,c"
+      },
+      "text_out": "SELECT a,b,c",
+      "unset": {}
+    },
+    {
+      "name": "real-query",
+      "text": "COPY (SELECT f.video[1] FROM input(:'source') f) TO :'dest'",
+      "variables": {
+        "source": "in.mp4",
+        "dest": "out.mp4"
+      },
+      "text_out": "COPY (SELECT f.video[1] FROM input('in.mp4') f) TO 'out.mp4'",
+      "unset": {}
+    },
+    {
+      "name": "empty",
+      "text": "",
+      "variables": {
+        "x": "1"
+      },
+      "text_out": "",
+      "unset": {}
+    },
+    {
+      "name": "only-colon",
+      "text": ":",
+      "variables": {},
+      "text_out": ":",
+      "unset": {}
+    }
+  ],
+  "referenced": [
+    {
+      "name": "plain",
+      "text": "SELECT :a, :'b', :\"c\"",
+      "names": [
+        "a",
+        "b",
+        "c"
+      ]
+    },
+    {
+      "name": "skips-spans",
+      "text": "SELECT ':a', \":b\" -- :c\n/* :d */ :e",
+      "names": [
+        "e"
+      ]
+    },
+    {
+      "name": "cast",
+      "text": "SELECT 1::int, :f",
+      "names": [
+        "f"
+      ]
+    },
+    {
+      "name": "subscripted",
+      "text": "SELECT :g[1], :h[i.i]",
+      "names": [
+        "g",
+        "h"
+      ]
+    },
+    {
+      "name": "none",
+      "text": "SELECT 1",
+      "names": []
+    }
+  ],
+  "declared": [
+    {
+      "name": "simple",
+      "text": "-- variables: source (input media path), prefix (output name prefix)\nSELECT 1",
+      "variables": [
+        {
+          "name": "source",
+          "description": "input media path"
+        },
+        {
+          "name": "prefix",
+          "description": "output name prefix"
+        }
+      ]
+    },
+    {
+      "name": "no-header",
+      "text": "SELECT 1",
+      "variables": []
+    },
+    {
+      "name": "bare-names",
+      "text": "-- variables: a, b, c",
+      "variables": [
+        {
+          "name": "a",
+          "description": ""
+        },
+        {
+          "name": "b",
+          "description": ""
+        },
+        {
+          "name": "c",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "comma-in-description",
+      "text": "-- variables: conf (threshold, defaults to 0.25), hold (frames)",
+      "variables": [
+        {
+          "name": "conf",
+          "description": "threshold, defaults to 0.25"
+        },
+        {
+          "name": "hold",
+          "description": "frames"
+        }
+      ]
+    },
+    {
+      "name": "unclosed-description",
+      "text": "-- variables: a (why",
+      "variables": [
+        {
+          "name": "a",
+          "description": "why"
+        }
+      ]
+    },
+    {
+      "name": "spacing",
+      "text": "--variables:   x   (an x)  ,y",
+      "variables": [
+        {
+          "name": "x",
+          "description": "an x"
+        },
+        {
+          "name": "y",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "mid-text",
+      "text": "SELECT 1\n-- variables: q (the q)\nSELECT 2",
+      "variables": [
+        {
+          "name": "q",
+          "description": "the q"
+        }
+      ]
+    }
+  ]
+}

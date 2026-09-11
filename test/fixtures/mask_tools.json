@@ -1,0 +1,596 @@
+{
+  "format_version": 2,
+  "name": "ffrwd/mask_tools",
+  "versions": [
+    {
+      "size": 1574,
+      "sha256": "8f9cac1ed83e81564e37ee1805dee0a97bb45beaace43b7f58a0317cc69f70fc",
+      "license": "MIT",
+      "recipes": [],
+      "version": "1.0.0",
+      "functions": [
+        {
+          "name": "masked",
+          "export": "src/composite.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "matte",
+              "type": "video_stream"
+            },
+            {
+              "name": "filtered",
+              "type": "video_stream"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "masked(v video_stream, matte video_stream, filtered video_stream)"
+        },
+        {
+          "name": "blur_where",
+          "export": "src/composite.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "matte",
+              "type": "video_stream"
+            },
+            {
+              "name": "sigma",
+              "type": "number"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "blur_where(v video_stream, matte video_stream, sigma number DEFAULT 12)"
+        },
+        {
+          "name": "mosaic_where",
+          "export": "src/composite.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "matte",
+              "type": "video_stream"
+            },
+            {
+              "name": "size",
+              "type": "number"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "mosaic_where(v video_stream, matte video_stream, size number DEFAULT 16)"
+        },
+        {
+          "name": "spotlight",
+          "export": "src/composite.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "matte",
+              "type": "video_stream"
+            },
+            {
+              "name": "dim",
+              "type": "number"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "spotlight(v video_stream, matte video_stream, dim number DEFAULT 0.6)"
+        },
+        {
+          "name": "cutout",
+          "export": "src/composite.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "matte",
+              "type": "video_stream"
+            },
+            {
+              "name": "background",
+              "type": "video_stream"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "cutout(v video_stream, matte video_stream, background video_stream)"
+        }
+      ],
+      "namespace": "ffrwd",
+      "description": "Composition over a grayscale matte, pure SQL over native ffmpeg: mask a filtered copy in, blur or mosaic where the matte is white, spotlight what it keeps, or cut it out over a new background. Model-agnostic - any matte beside any stream.",
+      "readme_html": "<h1>ffrwd/mask_tools</h1>\n<p>Composition over a matte, pure SQL over native ffmpeg. No model, no\nwasm: any grayscale matte beside any stream, and the filtering it\nselects happens in the encoder's own graph.</p>\n<p>A matte is a video stream read as a per-pixel weight: white keeps the\noverlay, black keeps the base, gray blends. Anything that produces one\nworks here - a segmentation model, a rasterized box list, a depth map,\na hand-drawn ramp.</p>\n<h2>Exports</h2>\n<ul>\n<li><code>masked(v, matte, filtered)</code> - the one <code>maskedmerge</code> spelling,\nreused by the rest: the picture where the matte is black, the\nfiltered copy where it is white.</li>\n<li><code>blur_where(v, matte, sigma DEFAULT 12)</code></li>\n<li><code>mosaic_where(v, matte, size DEFAULT 16)</code></li>\n<li><code>spotlight(v, matte, dim DEFAULT 0.6)</code> - darken everything but the\nmatte.</li>\n<li><code>cutout(v, matte, background)</code> - the matte as alpha, over a new\nbackground.</li>\n</ul>\n<h2>Example</h2>\n<p>Blur wherever a matte is white - here one from\n<code>ffrwd.yolo26.segment_mask</code>, but any grayscale matte does:</p>\n<pre><code class=\"language-sql\">COPY (\n  SELECT ffrwd.mask_tools.blur_where(v, ffrwd.yolo26.segment_mask(v, 'person'), 12),\n         f.audio\n  FROM input('street.mp4') f, unnest(f.video) v\n  WHERE v.index = 1\n) TO 'blurred.mp4' WITH (video_codec 'libx264', crf 20)\n</code></pre>\n",
+      "capabilities": [],
+      "engines_ffrwd": null,
+      "homepage": null,
+      "models": {},
+      "yanked": false,
+      "published_at": "2026-08-29T19:48:19.742891+00:00"
+    },
+    {
+      "size": 1324,
+      "sha256": "e306e18c7e3ed879b3a79b25dce1ea37c28e08d1427c6f14aae1e6e103936f4c",
+      "license": "MIT",
+      "recipes": [],
+      "version": "1.0.1",
+      "functions": [
+        {
+          "name": "masked",
+          "export": "src/composite.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "matte",
+              "type": "video_stream"
+            },
+            {
+              "name": "filtered",
+              "type": "video_stream"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "masked(v video_stream, matte video_stream, filtered video_stream)"
+        },
+        {
+          "name": "blur_where",
+          "export": "src/composite.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "matte",
+              "type": "video_stream"
+            },
+            {
+              "name": "sigma",
+              "type": "number"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "blur_where(v video_stream, matte video_stream, sigma number DEFAULT 12)"
+        },
+        {
+          "name": "mosaic_where",
+          "export": "src/composite.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "matte",
+              "type": "video_stream"
+            },
+            {
+              "name": "size",
+              "type": "number"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "mosaic_where(v video_stream, matte video_stream, size number DEFAULT 16)"
+        },
+        {
+          "name": "spotlight",
+          "export": "src/composite.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "matte",
+              "type": "video_stream"
+            },
+            {
+              "name": "dim",
+              "type": "number"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "spotlight(v video_stream, matte video_stream, dim number DEFAULT 0.6)"
+        },
+        {
+          "name": "cutout",
+          "export": "src/composite.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "matte",
+              "type": "video_stream"
+            },
+            {
+              "name": "background",
+              "type": "video_stream"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "cutout(v video_stream, matte video_stream, background video_stream)"
+        }
+      ],
+      "namespace": "ffrwd",
+      "description": "Use grayscale mattes to merge two sources in various strange ways.",
+      "readme_html": "<h1>ffrwd/mask_tools</h1>\n<p>Composition over a matte, pure SQL over native ffmpeg. A matte is a video stream read as a per-pixel weight: white keeps the\noverlay, black keeps the base, gray blends. Anything that produces one\nworks here - a segmentation model, a rasterized box list, a depth map,\na hand-drawn ramp.</p>\n<h2>Exports</h2>\n<ul>\n<li><code>masked(v, matte, filtered)</code> - the one <code>maskedmerge</code> - reused by the rest. <code>v</code> where the matte is black <code>filtered</code> where it is white.</li>\n<li><code>blur_where(v, matte, sigma DEFAULT 12)</code> - blurs.</li>\n<li><code>mosaic_where(v, matte, size DEFAULT 16)</code> - pixelates.</li>\n<li><code>spotlight(v, matte, dim DEFAULT 0.6)</code> - darkens everything but the matte.</li>\n<li><code>cutout(v, matte, background)</code> - the matte as alpha, over a new background.</li>\n</ul>\n",
+      "capabilities": [],
+      "engines_ffrwd": null,
+      "homepage": null,
+      "models": {},
+      "yanked": false,
+      "published_at": "2026-08-31T04:00:03.551255+00:00"
+    },
+    {
+      "size": 1625,
+      "sha256": "366d40c9e76ef2746c48d49fa338ee91ad481bd98fad2720b3a0b0ba142dfacf",
+      "license": "MIT",
+      "recipes": [],
+      "version": "1.0.2",
+      "functions": [
+        {
+          "name": "masked",
+          "export": "src/composite.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "matte",
+              "type": "video_stream"
+            },
+            {
+              "name": "filtered",
+              "type": "video_stream"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "masked(v video_stream, matte video_stream, filtered video_stream)"
+        },
+        {
+          "name": "blur_where",
+          "export": "src/composite.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "matte",
+              "type": "video_stream"
+            },
+            {
+              "name": "sigma",
+              "type": "number"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "blur_where(v video_stream, matte video_stream, sigma number DEFAULT 12)"
+        },
+        {
+          "name": "mosaic_where",
+          "export": "src/composite.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "matte",
+              "type": "video_stream"
+            },
+            {
+              "name": "size",
+              "type": "number"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "mosaic_where(v video_stream, matte video_stream, size number DEFAULT 16)"
+        },
+        {
+          "name": "spotlight",
+          "export": "src/composite.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "matte",
+              "type": "video_stream"
+            },
+            {
+              "name": "dim",
+              "type": "number"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "spotlight(v video_stream, matte video_stream, dim number DEFAULT 0.6)"
+        },
+        {
+          "name": "cutout",
+          "export": "src/composite.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "matte",
+              "type": "video_stream"
+            },
+            {
+              "name": "background",
+              "type": "video_stream"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "cutout(v video_stream, matte video_stream, background video_stream)"
+        }
+      ],
+      "namespace": "ffrwd",
+      "description": "Composition over a grayscale matte, pure SQL over native ffmpeg: mask a filtered copy in, blur or mosaic where the matte is white, spotlight what it keeps, or cut it out over a new background. Model-agnostic - any matte beside any stream.",
+      "readme_html": "<h1>ffrwd/mask_tools</h1>\n<p>Composition over a matte, pure SQL over native ffmpeg. No model, no\nwasm: any grayscale matte beside any stream, and the filtering it\nselects happens in the encoder's own graph.</p>\n<p>A matte is a video stream read as a per-pixel weight: white keeps the\noverlay, black keeps the base, gray blends. Anything that produces one\nworks here - a segmentation model, a rasterized box list, a depth map,\na hand-drawn ramp.</p>\n<h2>Exports</h2>\n<ul>\n<li><code>masked(v, matte, filtered)</code> - the one <code>maskedmerge</code> spelling,\nreused by the rest: the picture where the matte is black, the\nfiltered copy where it is white.</li>\n<li><code>blur_where(v, matte, sigma DEFAULT 12)</code></li>\n<li><code>mosaic_where(v, matte, size DEFAULT 16)</code></li>\n<li><code>spotlight(v, matte, dim DEFAULT 0.6)</code> - darken everything but the\nmatte.</li>\n<li><code>cutout(v, matte, background)</code> - the matte as alpha, over a new\nbackground.</li>\n</ul>\n<h2>Example</h2>\n<p>Blur wherever a matte is white - here one from\n<code>ffrwd.yolo26.segment_mask</code>, but any grayscale matte does:</p>\n<pre><code class=\"language-sql\">COPY (\n  SELECT ffrwd.mask_tools.blur_where(v, ffrwd.yolo26.segment_mask(v, 'person'), 12),\n         f.audio\n  FROM input('street.mp4') f, unnest(f.video) v\n  WHERE v.index = 1\n) TO 'blurred.mp4' WITH (video_codec 'libx264', crf 20)\n</code></pre>\n",
+      "capabilities": [],
+      "engines_ffrwd": null,
+      "homepage": "https://github.com/imbcmdth/ffrwd-packages",
+      "models": {},
+      "yanked": false,
+      "published_at": "2026-08-31T16:38:19.717237+00:00"
+    },
+    {
+      "size": 1401,
+      "sha256": "546b31564b531a76a451b7a30d38a064832bcf05597dec69638b639e69ed43bd",
+      "license": "MIT",
+      "recipes": [],
+      "version": "1.0.3",
+      "functions": [
+        {
+          "name": "masked",
+          "export": "src/composite.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "matte",
+              "type": "video_stream"
+            },
+            {
+              "name": "filtered",
+              "type": "video_stream"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "masked(v video_stream, matte video_stream, filtered video_stream)"
+        },
+        {
+          "name": "blur_where",
+          "export": "src/composite.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "matte",
+              "type": "video_stream"
+            },
+            {
+              "name": "sigma",
+              "type": "number"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "blur_where(v video_stream, matte video_stream, sigma number DEFAULT 12)"
+        },
+        {
+          "name": "mosaic_where",
+          "export": "src/composite.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "matte",
+              "type": "video_stream"
+            },
+            {
+              "name": "size",
+              "type": "number"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "mosaic_where(v video_stream, matte video_stream, size number DEFAULT 16)"
+        },
+        {
+          "name": "spotlight",
+          "export": "src/composite.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "matte",
+              "type": "video_stream"
+            },
+            {
+              "name": "dim",
+              "type": "number"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "spotlight(v video_stream, matte video_stream, dim number DEFAULT 0.6)"
+        },
+        {
+          "name": "cutout",
+          "export": "src/composite.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "matte",
+              "type": "video_stream"
+            },
+            {
+              "name": "background",
+              "type": "video_stream"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "cutout(v video_stream, matte video_stream, background video_stream)"
+        }
+      ],
+      "namespace": "ffrwd",
+      "description": "Composition over a grayscale matte, pure SQL over native ffmpeg: mask a filtered copy in, blur or mosaic where the matte is white, spotlight what it keeps, or cut it out over a new background. Model-agnostic - any matte beside any stream.",
+      "readme_html": "<h1>ffrwd/mask_tools</h1>\n<p>Composition over a matte, pure SQL over native ffmpeg. A matte is a video stream read as a per-pixel weight: white keeps the\noverlay, black keeps the base, gray blends. Anything that produces one\nworks here - a segmentation model, a rasterized box list, a depth map,\na hand-drawn ramp.</p>\n<h2>Exports</h2>\n<ul>\n<li><code>masked(v, matte, filtered)</code> - the one <code>maskedmerge</code> - reused by the rest. <code>v</code> where the matte is black <code>filtered</code> where it is white.</li>\n<li><code>blur_where(v, matte, sigma DEFAULT 12)</code> - blurs.</li>\n<li><code>mosaic_where(v, matte, size DEFAULT 16)</code> - pixelates.</li>\n<li><code>spotlight(v, matte, dim DEFAULT 0.6)</code> - darkens everything but the matte.</li>\n<li><code>cutout(v, matte, background)</code> - the matte as alpha, over a new background.</li>\n</ul>\n",
+      "capabilities": [],
+      "engines_ffrwd": null,
+      "homepage": "https://github.com/imbcmdth/ffrwd-packages",
+      "models": {},
+      "yanked": false,
+      "published_at": "2026-08-31T16:44:32.07397+00:00"
+    },
+    {
+      "size": 1367,
+      "sha256": "76cb38f5e367f2864315c37371399d21c3446ac9d9e3009a84f149c95aa30fe8",
+      "license": "MIT",
+      "recipes": [],
+      "version": "1.0.4",
+      "functions": [
+        {
+          "name": "masked",
+          "export": "src/composite.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "matte",
+              "type": "video_stream"
+            },
+            {
+              "name": "filtered",
+              "type": "video_stream"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "masked(v video_stream, matte video_stream, filtered video_stream)"
+        },
+        {
+          "name": "blur_where",
+          "export": "src/composite.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "matte",
+              "type": "video_stream"
+            },
+            {
+              "name": "sigma",
+              "type": "number"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "blur_where(v video_stream, matte video_stream, sigma number DEFAULT 12)"
+        },
+        {
+          "name": "mosaic_where",
+          "export": "src/composite.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "matte",
+              "type": "video_stream"
+            },
+            {
+              "name": "size",
+              "type": "number"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "mosaic_where(v video_stream, matte video_stream, size number DEFAULT 16)"
+        },
+        {
+          "name": "spotlight",
+          "export": "src/composite.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "matte",
+              "type": "video_stream"
+            },
+            {
+              "name": "dim",
+              "type": "number"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "spotlight(v video_stream, matte video_stream, dim number DEFAULT 0.6)"
+        },
+        {
+          "name": "cutout",
+          "export": "src/composite.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "matte",
+              "type": "video_stream"
+            },
+            {
+              "name": "background",
+              "type": "video_stream"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "cutout(v video_stream, matte video_stream, background video_stream)"
+        }
+      ],
+      "namespace": "ffrwd",
+      "description": "Composition over a grayscale matte in pure SQL over native ffmpeg: mask a filtered copy in, blur or mosaic out.",
+      "readme_html": "<h1>ffrwd/mask_tools</h1>\n<p>Composition over a matte, pure SQL over native ffmpeg. A matte is a video stream read as a per-pixel weight: white keeps the\noverlay, black keeps the base, gray blends. Anything that produces one\nworks here - a segmentation model, a rasterized box list, a depth map,\na hand-drawn ramp.</p>\n<h2>Exports</h2>\n<ul>\n<li><code>masked(v, matte, filtered)</code> - the one <code>maskedmerge</code> - reused by the rest. <code>v</code> where the matte is black <code>filtered</code> where it is white.</li>\n<li><code>blur_where(v, matte, sigma DEFAULT 12)</code> - blurs.</li>\n<li><code>mosaic_where(v, matte, size DEFAULT 16)</code> - pixelates.</li>\n<li><code>spotlight(v, matte, dim DEFAULT 0.6)</code> - darkens everything but the matte.</li>\n<li><code>cutout(v, matte, background)</code> - the matte as alpha, over a new background.</li>\n</ul>\n",
+      "capabilities": [],
+      "engines_ffrwd": null,
+      "homepage": "https://github.com/imbcmdth/ffrwd-packages",
+      "models": {},
+      "yanked": false,
+      "published_at": "2026-09-06T19:27:53.036275+00:00"
+    }
+  ]
+}

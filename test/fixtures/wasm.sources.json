@@ -1,0 +1,41 @@
+{
+  "format_version": 2,
+  "name": "ffrwd/wasm",
+  "versions": [
+    {
+      "version": "0.9.0",
+      "sha256": "3e3344860b527abec868d94a6fbdd3403b119cc361be16c2cf6879bbd4ea2243",
+      "sources": {}
+    },
+    {
+      "version": "0.10.0",
+      "sha256": "123bdfb59f3ac92cdd685c1cc9626e8063edea81d841135527add91e754f28b2",
+      "sources": {}
+    },
+    {
+      "version": "0.11.0",
+      "sha256": "255b3d66e8ac40f3bf86530b78ca7358d1732c33b54c2810b1bb375ab6b6d172",
+      "sources": {}
+    },
+    {
+      "version": "0.12.0",
+      "sha256": "00a56f4c1aee559c9608d596a53fb429a0347ad6db62f6ce3e1f64615a2f5bd9",
+      "sources": {}
+    },
+    {
+      "version": "0.13.0",
+      "sha256": "cb0e78c8fbb2f066f649df6da3c1a25808eabc8fd7f21095d49b89c891adc788",
+      "sources": {}
+    },
+    {
+      "version": "0.14.0",
+      "sha256": "4a638c3b7f5492add09467bb08ce3b48a6dfe65fed38966756e8579fb3419e9c",
+      "sources": {}
+    },
+    {
+      "version": "0.15.0",
+      "sha256": "0942300729e217d46f5eb22504b920cfa8cf465e7e031307a636a1da7f9bc836",
+      "sources": {}
+    }
+  ]
+}

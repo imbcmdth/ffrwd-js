@@ -1,0 +1,31 @@
+{
+  "format_version": 2,
+  "name": "ffrwd/mask_tools",
+  "versions": [
+    {
+      "version": "1.0.0",
+      "sha256": "8f9cac1ed83e81564e37ee1805dee0a97bb45beaace43b7f58a0317cc69f70fc",
+      "sources": {}
+    },
+    {
+      "version": "1.0.1",
+      "sha256": "e306e18c7e3ed879b3a79b25dce1ea37c28e08d1427c6f14aae1e6e103936f4c",
+      "sources": {}
+    },
+    {
+      "version": "1.0.2",
+      "sha256": "366d40c9e76ef2746c48d49fa338ee91ad481bd98fad2720b3a0b0ba142dfacf",
+      "sources": {}
+    },
+    {
+      "version": "1.0.3",
+      "sha256": "546b31564b531a76a451b7a30d38a064832bcf05597dec69638b639e69ed43bd",
+      "sources": {}
+    },
+    {
+      "version": "1.0.4",
+      "sha256": "76cb38f5e367f2864315c37371399d21c3446ac9d9e3009a84f149c95aa30fe8",
+      "sources": {}
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "name": "ffrwd-js",
+  "version": "0.1.0",
+  "description": "A client for the ffrwd job API: submit a query, upload its inputs, watch it run, take its outputs, and resolve packages against the public registry.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "main": "./dist/index.js",
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "smoke": "node --experimental-strip-types scripts/smoke.ts"
+  },
+  "keywords": [
+    "ffrwd",
+    "video",
+    "sql"
+  ],
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}

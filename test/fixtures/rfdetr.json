@@ -1,0 +1,1638 @@
+{
+  "format_version": 2,
+  "name": "ffrwd/rfdetr",
+  "versions": [
+    {
+      "size": 312698,
+      "sha256": "12a5f170d811465f9899b8124ac59129e109c1d9ca2c4792d16331513d36448c",
+      "license": "Apache-2.0",
+      "recipes": [
+        {
+          "file": "recipes/blur-people.sql",
+          "name": "blur-people",
+          "usage": "ffrwd run ffrwd/rfdetr:blur-people -v source=street.mp4 -v dest=blurred.mp4",
+          "compiles": true,
+          "optional": [
+            {
+              "name": "sigma",
+              "description": "blur strength, defaults to 12"
+            },
+            {
+              "name": "track",
+              "description": "video track index, defaults to the first"
+            }
+          ],
+          "required": [
+            {
+              "name": "source",
+              "description": "input media path"
+            },
+            {
+              "name": "dest",
+              "description": "output path"
+            }
+          ],
+          "description": "Blur every person the segmentation model finds, on the first video track,"
+        },
+        {
+          "file": "recipes/mosaic-people.sql",
+          "name": "mosaic-people",
+          "usage": "ffrwd run ffrwd/rfdetr:mosaic-people -v source=street.mp4 -v dest=mosaic.mp4",
+          "compiles": true,
+          "optional": [
+            {
+              "name": "size",
+              "description": "mosaic block size, defaults to 16"
+            },
+            {
+              "name": "track",
+              "description": "video track index, defaults to the first"
+            }
+          ],
+          "required": [
+            {
+              "name": "source",
+              "description": "input media path"
+            },
+            {
+              "name": "dest",
+              "description": "output path"
+            }
+          ],
+          "description": "Mosaic every person the segmentation model finds, on the first video"
+        },
+        {
+          "file": "recipes/spotlight.sql",
+          "name": "spotlight",
+          "usage": "ffrwd run ffrwd/rfdetr:spotlight -v source=street.mp4 -v class=person -v dest=spotlit.mp4",
+          "compiles": true,
+          "optional": [
+            {
+              "name": "class",
+              "description": "a COCO class name, e.g. person"
+            },
+            {
+              "name": "dim",
+              "description": "how much the rest darkens, 0 to 1, defaults to 0.6"
+            },
+            {
+              "name": "track",
+              "description": "video track index, defaults to the first"
+            }
+          ],
+          "required": [
+            {
+              "name": "source",
+              "description": "input media path"
+            },
+            {
+              "name": "dest",
+              "description": "output path"
+            }
+          ],
+          "description": "Darken everything but one class of object: the matte keeps its own"
+        },
+        {
+          "file": "recipes/replace-background.sql",
+          "name": "replace-background",
+          "usage": "ffrwd run ffrwd/rfdetr:replace-background -v source=street.mp4 -v background=beach.mp4 -v dest=composited.mp4",
+          "compiles": true,
+          "optional": [
+            {
+              "name": "track",
+              "description": "video track index, defaults to the first"
+            }
+          ],
+          "required": [
+            {
+              "name": "source",
+              "description": "input media path"
+            },
+            {
+              "name": "background",
+              "description": "media whose first video track becomes the backdrop"
+            },
+            {
+              "name": "dest",
+              "description": "output path"
+            }
+          ],
+          "description": "Cut the people out and lay them over a new background, scaled to fit the"
+        },
+        {
+          "file": "recipes/draw.sql",
+          "name": "draw",
+          "usage": "ffrwd run ffrwd/rfdetr:draw -v source=street.mp4 -v dest=boxed.mp4",
+          "compiles": true,
+          "optional": [
+            {
+              "name": "conf",
+              "description": "confidence threshold, defaults to 0.25"
+            },
+            {
+              "name": "track",
+              "description": "video track index, defaults to the first"
+            }
+          ],
+          "required": [
+            {
+              "name": "source",
+              "description": "input media path"
+            },
+            {
+              "name": "dest",
+              "description": "output path"
+            }
+          ],
+          "description": "Draw a box around everything the detector finds, on the first video"
+        },
+        {
+          "file": "recipes/detections.sql",
+          "name": "detections",
+          "usage": "ffrwd run ffrwd/rfdetr:detections -v source=street.mp4 -v dest=objects.ndjson",
+          "compiles": true,
+          "optional": [
+            {
+              "name": "conf",
+              "description": "confidence threshold, defaults to 0.25"
+            },
+            {
+              "name": "track",
+              "description": "video track index, defaults to the first"
+            }
+          ],
+          "required": [
+            {
+              "name": "source",
+              "description": "input media path"
+            },
+            {
+              "name": "dest",
+              "description": "output path, a .ndjson file"
+            }
+          ],
+          "description": "Every detection as NDJSON, one line per object per frame - class,"
+        }
+      ],
+      "version": "0.1.0",
+      "functions": [
+        {
+          "name": "detect",
+          "export": "src/model.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "conf",
+              "type": "number"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "detect(v video_stream, conf number DEFAULT 0.25)"
+        },
+        {
+          "name": "segment_mask",
+          "export": "src/model.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "class",
+              "type": "text"
+            },
+            {
+              "name": "conf",
+              "type": "number"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "segment_mask(v video_stream, class text DEFAULT NULL, conf number DEFAULT 0.25)"
+        },
+        {
+          "name": "boxes_mask",
+          "export": "src/boxes.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "boxes",
+              "type": "STRUCT(class text, conf number, x number, y number, w number, h number)[]"
+            },
+            {
+              "name": "grow",
+              "type": "number"
+            },
+            {
+              "name": "feather",
+              "type": "number"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "boxes_mask(v video_stream, boxes STRUCT(class text, conf number, x number, y number, w number, h number)[], grow number DEFAULT 0, feather number DEFAULT 0)"
+        },
+        {
+          "name": "draw_boxes",
+          "export": "src/boxes.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "boxes",
+              "type": "STRUCT(class text, conf number, x number, y number, w number, h number)[]"
+            },
+            {
+              "name": "thickness",
+              "type": "number"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "draw_boxes(v video_stream, boxes STRUCT(class text, conf number, x number, y number, w number, h number)[], thickness number DEFAULT 2)"
+        }
+      ],
+      "namespace": "ffrwd",
+      "description": "RF-DETR detection and instance segmentation. The weights are Roboflow's (Apache-2.0), fetched at install.",
+      "readme_html": "<h1>ffrwd/rfdetr</h1>\n<p>RF-DETR detection and instance segmentatio. Same API as YOLO26: <code>detect</code> produces rows,\n<code>segment_mask</code> produces a matte, the utilities turn rows into mattes or\ndrawn overlays, and everything downstream is native ffmpeg.</p>\n<h2>Model exports</h2>\n<ul>\n<li><code>detect(v, conf DEFAULT 0.25)</code> returns\n<code>STRUCT(v video_stream, boxes STRUCT(class text, conf number, x number, y number, w number, h number)[])</code> -\nthe picture untouched, one row per object per frame, boxes in the\nframe's own pixels, classes as COCO label text.</li>\n<li><code>segment_mask(v, class DEFAULT NULL, conf DEFAULT 0.25)</code> returns the\nfound instances as one grayscale matte, optionally narrowed to one\nclass name.</li>\n</ul>\n<p>A DETR head returns no duplicates, so there is no NMS anywhere; the\nmodule resizes each frame to the model's square, normalizes it, and\nreads the boxes and per-query masks back. Narrow <code>detect</code>'s rows at\nrun time with the gather spelling:</p>\n<pre><code class=\"language-sql\">ARRAY(SELECT r FROM unnest(ffrwd.rfdetr.detect(v).boxes) r\n      WHERE r.class = 'person' AND r.conf &gt;= 0.5)\n</code></pre>\n<h2>Utilities</h2>\n<ul>\n<li><code>boxes_mask(v, boxes, grow DEFAULT 0, feather DEFAULT 0)</code> - the rows\nrasterized into a matte; <code>grow</code> pads each box in pixels, <code>feather</code>\nsoftens the edge.</li>\n<li><code>draw_boxes(v, boxes, thickness DEFAULT 2)</code> - the boxes drawn on the\npicture.</li>\n</ul>\n<h2>Composition</h2>\n<p>The composition layer lives in <code>ffrwd/mask_tools</code> - <code>blur_where</code>,\n<code>mosaic_where</code>, <code>spotlight</code>, <code>cutout</code> and the <code>masked</code> spelling they\nshare - because it is model-agnostic: any grayscale matte beside any\nstream, all native ffmpeg.</p>\n<h2>Recipes</h2>\n<p><code>blur-people</code>, <code>mosaic-people</code>, <code>spotlight</code>, <code>replace-background</code>,\n<code>draw</code>, <code>detections</code> - run <code>ffrwd list</code> for each one's variables, or\nread the header of the recipe file.</p>\n<pre><code>ffrwd run ffrwd/rfdetr:blur-people -v source=street.mp4 -v dest=blurred.mp4\n</code></pre>\n<h2>Building</h2>\n<p>The modules build against the wit from the installed <code>ffrwd/wasm</code>\npackage:</p>\n<pre><code>ffrwd install -g ffrwd/wasm\ncargo build --target wasm32-wasip2 --release\n</code></pre>\n<h2>License</h2>\n<p>This package is <strong>Apache-2.0</strong>, and so are the weights. RF-DETR is\nRoboflow's real-time detection transformer; its Nano through Large\nsizes are released under Apache-2.0, and this package pins two of the\nLarge ones.</p>\n<p>The weights are not in the archive: the manifest pins them - repo,\nrevision, file and sha256 - and <code>ffrwd install</code> fetches and verifies\nthem. Both are fp32 ONNX exports made with Roboflow's own exporter\nfrom the official checkpoints, and live in\n<a href=\"https://huggingface.co/imbcmdth/rfdetr-onnx\">imbcmdth/rfdetr-onnx</a>\nwith the checkpoint hashes and the export script beside them: RF-DETR\nLarge at 704x704 for detection and RF-DETR Seg Large at 504x504 for\nsegmentation, about 266 MB together, run through <code>wasi:nn</code> on the\nmachine's own ONNX Runtime.</p>\n",
+      "capabilities": [
+        "nn"
+      ],
+      "engines_ffrwd": null,
+      "homepage": "https://github.com/imbcmdth/ffrwd-package-rfdetr",
+      "models": {
+        "detect": {
+          "file": "rf-detr-large-2026.onnx",
+          "repo": "imbcmdth/rfdetr-onnx",
+          "size": 128189032,
+          "sha256": "da7f1bc118c6071b48096149b5df01eb1caeb3bb60a262949ac0e41f7c96f705",
+          "revision": "9690caf9f62195acb985155b2b67224e623e1443"
+        },
+        "segment_mask": {
+          "file": "rf-detr-seg-large.onnx",
+          "repo": "imbcmdth/rfdetr-onnx",
+          "size": 137933860,
+          "sha256": "e6154493b7ba38c285f416db812589267a7292a736fa8564577bcd27a9012e9e",
+          "revision": "9690caf9f62195acb985155b2b67224e623e1443"
+        }
+      },
+      "yanked": false,
+      "published_at": "2026-09-06T19:27:59.029553+00:00"
+    },
+    {
+      "size": 276588,
+      "sha256": "b4437814a4afc0cc692b89c2a79075089b0f65a545e7787482f1f45bb81c8268",
+      "license": "Apache-2.0",
+      "recipes": [
+        {
+          "file": "recipes/blur-people.sql",
+          "name": "blur-people",
+          "usage": "ffrwd run ffrwd/rfdetr:blur-people -v source=street.mp4 -v dest=blurred.mp4",
+          "compiles": true,
+          "optional": [
+            {
+              "name": "sigma",
+              "description": "blur strength, defaults to 12"
+            },
+            {
+              "name": "track",
+              "description": "video track index, defaults to the first"
+            }
+          ],
+          "required": [
+            {
+              "name": "source",
+              "description": "input media path"
+            },
+            {
+              "name": "dest",
+              "description": "output path"
+            }
+          ],
+          "description": "Blur every person the segmentation model finds, on the first video track,"
+        },
+        {
+          "file": "recipes/mosaic-people.sql",
+          "name": "mosaic-people",
+          "usage": "ffrwd run ffrwd/rfdetr:mosaic-people -v source=street.mp4 -v dest=mosaic.mp4",
+          "compiles": true,
+          "optional": [
+            {
+              "name": "size",
+              "description": "mosaic block size, defaults to 16"
+            },
+            {
+              "name": "track",
+              "description": "video track index, defaults to the first"
+            }
+          ],
+          "required": [
+            {
+              "name": "source",
+              "description": "input media path"
+            },
+            {
+              "name": "dest",
+              "description": "output path"
+            }
+          ],
+          "description": "Mosaic every person the segmentation model finds, on the first video"
+        },
+        {
+          "file": "recipes/spotlight.sql",
+          "name": "spotlight",
+          "usage": "ffrwd run ffrwd/rfdetr:spotlight -v source=street.mp4 -v class=person -v dest=spotlit.mp4",
+          "compiles": true,
+          "optional": [
+            {
+              "name": "class",
+              "description": "a COCO class name, e.g. person"
+            },
+            {
+              "name": "dim",
+              "description": "how much the rest darkens, 0 to 1, defaults to 0.6"
+            },
+            {
+              "name": "track",
+              "description": "video track index, defaults to the first"
+            }
+          ],
+          "required": [
+            {
+              "name": "source",
+              "description": "input media path"
+            },
+            {
+              "name": "dest",
+              "description": "output path"
+            }
+          ],
+          "description": "Darken everything but one class of object: the matte keeps its own"
+        },
+        {
+          "file": "recipes/replace-background.sql",
+          "name": "replace-background",
+          "usage": "ffrwd run ffrwd/rfdetr:replace-background -v source=street.mp4 -v background=beach.mp4 -v dest=composited.mp4",
+          "compiles": true,
+          "optional": [
+            {
+              "name": "track",
+              "description": "video track index, defaults to the first"
+            }
+          ],
+          "required": [
+            {
+              "name": "source",
+              "description": "input media path"
+            },
+            {
+              "name": "background",
+              "description": "media whose first video track becomes the backdrop"
+            },
+            {
+              "name": "dest",
+              "description": "output path"
+            }
+          ],
+          "description": "Cut the people out and lay them over a new background, scaled to fit the"
+        },
+        {
+          "file": "recipes/draw.sql",
+          "name": "draw",
+          "usage": "ffrwd run ffrwd/rfdetr:draw -v source=street.mp4 -v dest=boxed.mp4",
+          "compiles": true,
+          "optional": [
+            {
+              "name": "conf",
+              "description": "confidence threshold, defaults to 0.25"
+            },
+            {
+              "name": "track",
+              "description": "video track index, defaults to the first"
+            }
+          ],
+          "required": [
+            {
+              "name": "source",
+              "description": "input media path"
+            },
+            {
+              "name": "dest",
+              "description": "output path"
+            }
+          ],
+          "description": "Draw a box around everything the detector finds, on the first video"
+        },
+        {
+          "file": "recipes/detections.sql",
+          "name": "detections",
+          "usage": "ffrwd run ffrwd/rfdetr:detections -v source=street.mp4 -v dest=objects.ndjson",
+          "compiles": true,
+          "optional": [
+            {
+              "name": "conf",
+              "description": "confidence threshold, defaults to 0.25"
+            },
+            {
+              "name": "track",
+              "description": "video track index, defaults to the first"
+            }
+          ],
+          "required": [
+            {
+              "name": "source",
+              "description": "input media path"
+            },
+            {
+              "name": "dest",
+              "description": "output path, a .ndjson file"
+            }
+          ],
+          "description": "Every detection as NDJSON, one line per object per frame - class,"
+        }
+      ],
+      "version": "0.1.1",
+      "functions": [
+        {
+          "name": "detect",
+          "export": "src/model.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "conf",
+              "type": "number"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "detect(v video_stream, conf number DEFAULT 0.25)"
+        },
+        {
+          "name": "segment_mask",
+          "export": "src/model.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "class",
+              "type": "text"
+            },
+            {
+              "name": "conf",
+              "type": "number"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "segment_mask(v video_stream, class text DEFAULT NULL, conf number DEFAULT 0.25)"
+        },
+        {
+          "name": "boxes_mask",
+          "export": "src/boxes.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "boxes",
+              "type": "STRUCT(class text, conf number, x number, y number, w number, h number)[]"
+            },
+            {
+              "name": "grow",
+              "type": "number"
+            },
+            {
+              "name": "feather",
+              "type": "number"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "boxes_mask(v video_stream, boxes STRUCT(class text, conf number, x number, y number, w number, h number)[], grow number DEFAULT 0, feather number DEFAULT 0)"
+        },
+        {
+          "name": "draw_boxes",
+          "export": "src/boxes.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "boxes",
+              "type": "STRUCT(class text, conf number, x number, y number, w number, h number)[]"
+            },
+            {
+              "name": "thickness",
+              "type": "number"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "draw_boxes(v video_stream, boxes STRUCT(class text, conf number, x number, y number, w number, h number)[], thickness number DEFAULT 2)"
+        }
+      ],
+      "namespace": "ffrwd",
+      "description": "RF-DETR detection and instance segmentation. The weights are Roboflow's (Apache-2.0), fetched at install.",
+      "readme_html": "<h1>ffrwd/rfdetr</h1>\n<p>RF-DETR detection and instance segmentatio. Same API as YOLO26: <code>detect</code> produces rows,\n<code>segment_mask</code> produces a matte, the utilities turn rows into mattes or\ndrawn overlays, and everything downstream is native ffmpeg.</p>\n<h2>Model exports</h2>\n<ul>\n<li><code>detect(v, conf DEFAULT 0.25)</code> returns\n<code>STRUCT(v video_stream, boxes STRUCT(class text, conf number, x number, y number, w number, h number)[])</code> -\nthe picture untouched, one row per object per frame, boxes in the\nframe's own pixels, classes as COCO label text.</li>\n<li><code>segment_mask(v, class DEFAULT NULL, conf DEFAULT 0.25)</code> returns the\nfound instances as one grayscale matte, optionally narrowed to one\nclass name.</li>\n</ul>\n<p>A DETR head returns no duplicates, so there is no NMS anywhere; the\nmodule resizes each frame to the model's square, normalizes it, and\nreads the boxes and per-query masks back. Narrow <code>detect</code>'s rows at\nrun time with the gather spelling:</p>\n<pre><code class=\"language-sql\">ARRAY(SELECT r FROM unnest(ffrwd.rfdetr.detect(v).boxes) r\n      WHERE r.class = 'person' AND r.conf &gt;= 0.5)\n</code></pre>\n<h2>Utilities</h2>\n<ul>\n<li><code>boxes_mask(v, boxes, grow DEFAULT 0, feather DEFAULT 0)</code> - the rows\nrasterized into a matte; <code>grow</code> pads each box in pixels, <code>feather</code>\nsoftens the edge.</li>\n<li><code>draw_boxes(v, boxes, thickness DEFAULT 2)</code> - the boxes drawn on the\npicture.</li>\n</ul>\n<h2>Composition</h2>\n<p>The composition layer lives in <code>ffrwd/mask_tools</code> - <code>blur_where</code>,\n<code>mosaic_where</code>, <code>spotlight</code>, <code>cutout</code> and the <code>masked</code> spelling they\nshare - because it is model-agnostic: any grayscale matte beside any\nstream, all native ffmpeg.</p>\n<h2>Recipes</h2>\n<p><code>blur-people</code>, <code>mosaic-people</code>, <code>spotlight</code>, <code>replace-background</code>,\n<code>draw</code>, <code>detections</code> - run <code>ffrwd list</code> for each one's variables, or\nread the header of the recipe file.</p>\n<pre><code>ffrwd run ffrwd/rfdetr:blur-people -v source=street.mp4 -v dest=blurred.mp4\n</code></pre>\n<h2>Building</h2>\n<p>The modules build against the wit from the installed <code>ffrwd/wasm</code>\npackage:</p>\n<pre><code>ffrwd install -g ffrwd/wasm\ncargo build --target wasm32-wasip2 --release\n</code></pre>\n<h2>License</h2>\n<p>This package is <strong>Apache-2.0</strong>, and so are the weights. RF-DETR is\nRoboflow's real-time detection transformer; its Nano through Large\nsizes are released under Apache-2.0, and this package pins two of the\nLarge ones.</p>\n<p>The weights are not in the archive: the manifest pins them - repo,\nrevision, file and sha256 - and <code>ffrwd install</code> fetches and verifies\nthem. Both are fp32 ONNX exports made with Roboflow's own exporter\nfrom the official checkpoints, and live in\n<a href=\"https://huggingface.co/imbcmdth/rfdetr-onnx\">imbcmdth/rfdetr-onnx</a>\nwith the checkpoint hashes and the export script beside them: RF-DETR\nLarge at 704x704 for detection and RF-DETR Seg Large at 504x504 for\nsegmentation, about 266 MB together, run through <code>wasi:nn</code> on the\nmachine's own ONNX Runtime.</p>\n",
+      "capabilities": [
+        "nn"
+      ],
+      "engines_ffrwd": null,
+      "homepage": "https://github.com/imbcmdth/ffrwd-package-rfdetr",
+      "models": {
+        "detect": {
+          "file": "rf-detr-large-2026.onnx",
+          "repo": "imbcmdth/rfdetr-onnx",
+          "size": 128189032,
+          "sha256": "da7f1bc118c6071b48096149b5df01eb1caeb3bb60a262949ac0e41f7c96f705",
+          "revision": "9690caf9f62195acb985155b2b67224e623e1443"
+        },
+        "segment_mask": {
+          "file": "rf-detr-seg-large.onnx",
+          "repo": "imbcmdth/rfdetr-onnx",
+          "size": 137933860,
+          "sha256": "e6154493b7ba38c285f416db812589267a7292a736fa8564577bcd27a9012e9e",
+          "revision": "9690caf9f62195acb985155b2b67224e623e1443"
+        }
+      },
+      "yanked": false,
+      "published_at": "2026-09-08T23:36:01.285062+00:00"
+    },
+    {
+      "size": 1394851,
+      "sha256": "d1090906ccaf0645e7af33fc58563cfcc2244319eb0ed26fa1d94a71ded8a855",
+      "license": "Apache-2.0",
+      "recipes": [
+        {
+          "file": "recipes/blur-people.sql",
+          "name": "blur-people",
+          "usage": "ffrwd run ffrwd/rfdetr:blur-people -v source=street.mp4 -v dest=blurred.mp4",
+          "compiles": true,
+          "optional": [
+            {
+              "name": "sigma",
+              "description": "blur strength, defaults to 12"
+            },
+            {
+              "name": "track",
+              "description": "video track index, defaults to the first"
+            }
+          ],
+          "required": [
+            {
+              "name": "source",
+              "description": "input media path"
+            },
+            {
+              "name": "dest",
+              "description": "output path"
+            }
+          ],
+          "description": "Blur every person the segmentation model finds, on the first video track,"
+        },
+        {
+          "file": "recipes/mosaic-people.sql",
+          "name": "mosaic-people",
+          "usage": "ffrwd run ffrwd/rfdetr:mosaic-people -v source=street.mp4 -v dest=mosaic.mp4",
+          "compiles": true,
+          "optional": [
+            {
+              "name": "size",
+              "description": "mosaic block size, defaults to 16"
+            },
+            {
+              "name": "track",
+              "description": "video track index, defaults to the first"
+            }
+          ],
+          "required": [
+            {
+              "name": "source",
+              "description": "input media path"
+            },
+            {
+              "name": "dest",
+              "description": "output path"
+            }
+          ],
+          "description": "Mosaic every person the segmentation model finds, on the first video"
+        },
+        {
+          "file": "recipes/spotlight.sql",
+          "name": "spotlight",
+          "usage": "ffrwd run ffrwd/rfdetr:spotlight -v source=street.mp4 -v class=person -v dest=spotlit.mp4",
+          "compiles": true,
+          "optional": [
+            {
+              "name": "class",
+              "description": "a COCO class name, e.g. person"
+            },
+            {
+              "name": "dim",
+              "description": "how much the rest darkens, 0 to 1, defaults to 0.6"
+            },
+            {
+              "name": "track",
+              "description": "video track index, defaults to the first"
+            }
+          ],
+          "required": [
+            {
+              "name": "source",
+              "description": "input media path"
+            },
+            {
+              "name": "dest",
+              "description": "output path"
+            }
+          ],
+          "description": "Darken everything but one class of object: the matte keeps its own"
+        },
+        {
+          "file": "recipes/replace-background.sql",
+          "name": "replace-background",
+          "usage": "ffrwd run ffrwd/rfdetr:replace-background -v source=street.mp4 -v background=beach.mp4 -v dest=composited.mp4",
+          "compiles": true,
+          "optional": [
+            {
+              "name": "track",
+              "description": "video track index, defaults to the first"
+            }
+          ],
+          "required": [
+            {
+              "name": "source",
+              "description": "input media path"
+            },
+            {
+              "name": "background",
+              "description": "media whose first video track becomes the backdrop"
+            },
+            {
+              "name": "dest",
+              "description": "output path"
+            }
+          ],
+          "description": "Cut the people out and lay them over a new background, scaled to fit the"
+        },
+        {
+          "file": "recipes/draw.sql",
+          "name": "draw",
+          "usage": "ffrwd run ffrwd/rfdetr:draw -v source=street.mp4 -v dest=boxed.mp4",
+          "compiles": true,
+          "optional": [
+            {
+              "name": "conf",
+              "description": "confidence threshold, defaults to 0.25"
+            },
+            {
+              "name": "track",
+              "description": "video track index, defaults to the first"
+            }
+          ],
+          "required": [
+            {
+              "name": "source",
+              "description": "input media path"
+            },
+            {
+              "name": "dest",
+              "description": "output path"
+            }
+          ],
+          "description": "Draw a box around everything the detector finds, on the first video"
+        },
+        {
+          "file": "recipes/detections.sql",
+          "name": "detections",
+          "usage": "ffrwd run ffrwd/rfdetr:detections -v source=street.mp4 -v dest=objects.ndjson",
+          "compiles": true,
+          "optional": [
+            {
+              "name": "conf",
+              "description": "confidence threshold, defaults to 0.25"
+            },
+            {
+              "name": "track",
+              "description": "video track index, defaults to the first"
+            }
+          ],
+          "required": [
+            {
+              "name": "source",
+              "description": "input media path"
+            },
+            {
+              "name": "dest",
+              "description": "output path, a .ndjson file"
+            }
+          ],
+          "description": "Every detection as NDJSON, one line per object per frame - class,"
+        },
+        {
+          "file": "recipes/blur-faces.sql",
+          "name": "blur-faces",
+          "usage": "ffrwd run ffrwd/rfdetr:blur-faces -v source=class.mp4 -v dest=blurred.mp4",
+          "compiles": true,
+          "optional": [
+            {
+              "name": "conf",
+              "description": "confidence threshold, defaults to 0.25"
+            },
+            {
+              "name": "grow",
+              "description": "pixels added around each box, defaults to 8"
+            },
+            {
+              "name": "feather",
+              "description": "how far the edge softens in pixels, defaults to 4"
+            },
+            {
+              "name": "sigma",
+              "description": "blur strength, defaults to 12"
+            },
+            {
+              "name": "track",
+              "description": "video track index, defaults to the first"
+            }
+          ],
+          "required": [
+            {
+              "name": "source",
+              "description": "input media path"
+            },
+            {
+              "name": "dest",
+              "description": "output path"
+            }
+          ],
+          "description": "Blur every face the detector finds, on the first video track, or the one"
+        },
+        {
+          "file": "recipes/mosaic-faces.sql",
+          "name": "mosaic-faces",
+          "usage": "ffrwd run ffrwd/rfdetr:mosaic-faces -v source=class.mp4 -v dest=mosaic.mp4",
+          "compiles": true,
+          "optional": [
+            {
+              "name": "conf",
+              "description": "confidence threshold, defaults to 0.25"
+            },
+            {
+              "name": "grow",
+              "description": "pixels added around each box, defaults to 8"
+            },
+            {
+              "name": "feather",
+              "description": "how far the edge softens in pixels, defaults to 4"
+            },
+            {
+              "name": "size",
+              "description": "mosaic block size, defaults to 16"
+            },
+            {
+              "name": "track",
+              "description": "video track index, defaults to the first"
+            }
+          ],
+          "required": [
+            {
+              "name": "source",
+              "description": "input media path"
+            },
+            {
+              "name": "dest",
+              "description": "output path"
+            }
+          ],
+          "description": "Mosaic every face the detector finds, on the first video track, or the one"
+        },
+        {
+          "file": "recipes/draw-faces.sql",
+          "name": "draw-faces",
+          "usage": "ffrwd run ffrwd/rfdetr:draw-faces -v source=class.mp4 -v dest=boxed.mp4",
+          "compiles": true,
+          "optional": [
+            {
+              "name": "conf",
+              "description": "confidence threshold, defaults to 0.25"
+            },
+            {
+              "name": "track",
+              "description": "video track index, defaults to the first"
+            }
+          ],
+          "required": [
+            {
+              "name": "source",
+              "description": "input media path"
+            },
+            {
+              "name": "dest",
+              "description": "output path"
+            }
+          ],
+          "description": "Draw a box around every face the detector finds, on the first video"
+        },
+        {
+          "file": "recipes/faces.sql",
+          "name": "faces",
+          "usage": "ffrwd run ffrwd/rfdetr:faces -v source=class.mp4 -v dest=faces.ndjson",
+          "compiles": true,
+          "optional": [
+            {
+              "name": "conf",
+              "description": "confidence threshold, defaults to 0.25"
+            },
+            {
+              "name": "track",
+              "description": "video track index, defaults to the first"
+            }
+          ],
+          "required": [
+            {
+              "name": "source",
+              "description": "input media path"
+            },
+            {
+              "name": "dest",
+              "description": "output path, a .ndjson file"
+            }
+          ],
+          "description": "Every face as NDJSON, one line per face per frame - the class `face`, the"
+        }
+      ],
+      "version": "0.2.0",
+      "functions": [
+        {
+          "name": "detect",
+          "export": "src/model.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "conf",
+              "type": "number"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "detect(v video_stream, conf number DEFAULT 0.25)"
+        },
+        {
+          "name": "detect_faces",
+          "export": "src/model.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "conf",
+              "type": "number"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "detect_faces(v video_stream, conf number DEFAULT 0.25)"
+        },
+        {
+          "name": "segment_mask",
+          "export": "src/model.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "class",
+              "type": "text"
+            },
+            {
+              "name": "conf",
+              "type": "number"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "segment_mask(v video_stream, class text DEFAULT NULL, conf number DEFAULT 0.25)"
+        },
+        {
+          "name": "boxes_mask",
+          "export": "src/boxes.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "boxes",
+              "type": "STRUCT(class text, conf number, x number, y number, w number, h number)[]"
+            },
+            {
+              "name": "grow",
+              "type": "number"
+            },
+            {
+              "name": "feather",
+              "type": "number"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "boxes_mask(v video_stream, boxes STRUCT(class text, conf number, x number, y number, w number, h number)[], grow number DEFAULT 0, feather number DEFAULT 0)"
+        },
+        {
+          "name": "draw_boxes",
+          "export": "src/boxes.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "boxes",
+              "type": "STRUCT(class text, conf number, x number, y number, w number, h number)[]"
+            },
+            {
+              "name": "thickness",
+              "type": "number"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "draw_boxes(v video_stream, boxes STRUCT(class text, conf number, x number, y number, w number, h number)[], thickness number DEFAULT 2)"
+        }
+      ],
+      "namespace": "ffrwd",
+      "description": "RF-DETR detection, instance segmentation and face detection: rows, mattes and the utilities that turn rows into mattes or drawn overlays. The weights are Roboflow's and a third-party face fine-tune, all Apache-2.0, fetched at install.",
+      "readme_html": "<h1>ffrwd/rfdetr</h1>\n<p>RF-DETR detection, instance segmentation and face detection. Same API\nas YOLO26: <code>detect</code> and <code>detect_faces</code> produce rows, <code>segment_mask</code>\nproduces a matte, the utilities turn rows into mattes or drawn\noverlays, and everything downstream is native ffmpeg.</p>\n<h2>Model exports</h2>\n<ul>\n<li><code>detect(v, conf DEFAULT 0.25)</code> returns\n<code>STRUCT(v video_stream, boxes STRUCT(class text, conf number, x number, y number, w number, h number)[])</code> -\nthe picture untouched, one row per object per frame, boxes in the\nframe's own pixels, classes as COCO label text.</li>\n<li><code>detect_faces(v, conf DEFAULT 0.25)</code> returns the same record with\none row per face, every row's class the text <code>face</code>. A different\nmodel behind the same shape, so <code>boxes_mask</code>, <code>draw_boxes</code> and the\ngather spelling below read its rows unchanged.</li>\n<li><code>segment_mask(v, class DEFAULT NULL, conf DEFAULT 0.25)</code> returns the\nfound instances as one grayscale matte, optionally narrowed to one\nclass name.</li>\n</ul>\n<p>A DETR head returns no duplicates, so there is no NMS anywhere; the\nmodule resizes each frame to the model's square, normalizes it, and\nreads the boxes and per-query masks back. Narrow <code>detect</code>'s rows at\nrun time with the gather spelling:</p>\n<pre><code class=\"language-sql\">ARRAY(SELECT r FROM unnest(ffrwd.rfdetr.detect(v).boxes) r\n      WHERE r.class = 'person' AND r.conf &gt;= 0.5)\n</code></pre>\n<h2>Faces</h2>\n<p><code>detect_faces</code> is for the face itself, not the person around it: the\nbox it returns is the head, which is what a privacy blur has to cover\nand what an age or identity model reads. COCO has no face class, so\nthis is a second RF-DETR, Medium size, fine-tuned for one class.</p>\n<p>It runs at a single 576x576 pass over the whole frame, so how much of\nthe frame a face fills decides whether it is found. On WIDER FACE's\nvalidation set, at the default confidence, it finds 98 in 100 faces\nover 96 px across, 82 in 100 between 32 and 96 px, and 17 in 100\nunder 32 px. Footage where the faces that matter are small - a wide\nshot of a room - wants a closer camera or a crop before the\ndetector, not a lower threshold.</p>\n<p>One answer the head gives is not a face: on a crowd it sometimes\nreturns a box covering nearly the whole frame at a middling\nconfidence. A face is taller than it is wide, so the module drops a\nbox that is both wider than 1.3 times its height and larger than a\nquarter of the frame. A wide box that is small, a face half behind\nsomething, stays; so does a large box that is tall, a face close to\nthe camera.</p>\n<p>For a blur, pad the box: <code>boxes_mask</code>'s <code>grow</code> adds pixels around\neach face, and its <code>feather</code> softens the edge, so hair and the jaw\nline go with the face. The <code>blur-faces</code> recipe defaults to 8 and 4.</p>\n<h2>Utilities</h2>\n<ul>\n<li><code>boxes_mask(v, boxes, grow DEFAULT 0, feather DEFAULT 0)</code> - the rows\nrasterized into a matte; <code>grow</code> pads each box in pixels, <code>feather</code>\nsoftens the edge.</li>\n<li><code>draw_boxes(v, boxes, thickness DEFAULT 2)</code> - the boxes drawn on the\npicture.</li>\n</ul>\n<h2>Composition</h2>\n<p>The composition layer lives in <code>ffrwd/mask_tools</code> - <code>blur_where</code>,\n<code>mosaic_where</code>, <code>spotlight</code>, <code>cutout</code> and the <code>masked</code> spelling they\nshare - because it is model-agnostic: any grayscale matte beside any\nstream, all native ffmpeg.</p>\n<h2>Recipes</h2>\n<p>People: <code>blur-people</code>, <code>mosaic-people</code>, <code>spotlight</code>,\n<code>replace-background</code>, <code>draw</code>, <code>detections</code>. Faces: <code>blur-faces</code>,\n<code>mosaic-faces</code>, <code>draw-faces</code>, <code>faces</code>. Run <code>ffrwd list ffrwd/rfdetr</code>\nfor each one's variables, or read the header of the recipe file.</p>\n<pre><code>ffrwd run ffrwd/rfdetr:blur-people -v source=street.mp4 -v dest=blurred.mp4\nffrwd run ffrwd/rfdetr:blur-faces -v source=class.mp4 -v dest=blurred.mp4\n</code></pre>\n<h2>Building</h2>\n<p>The modules build against the wit from the installed <code>ffrwd/wasm</code>\npackage, and the ones that read a picture take the frame as <code>rgba</code>,\nconverted upstream by ffmpeg with the stream's own range and matrix,\nand turn it into the model's tensor with the\n<a href=\"https://github.com/imbcmdth/ffrwd-frame\">ffrwd-frame</a> crate:</p>\n<pre><code>ffrwd install -g ffrwd/wasm\ncargo build --target wasm32-wasip2 --release\n</code></pre>\n<h2>License</h2>\n<p>This package is <strong>Apache-2.0</strong>, and so are the weights. RF-DETR is\nRoboflow's real-time detection transformer; its Nano through Large\nsizes are released under Apache-2.0, and this package pins two of the\nLarge ones. The face detector is RF-DETR Medium as fine-tuned by\n<a href=\"https://huggingface.co/Herojayjay/RFDETR-Face-Detection\">Herojayjay/RFDETR-Face-Detection</a>,\nalso Apache-2.0, on a Kaggle face dataset of about 16,700 images.</p>\n<p>The weights are not in the archive: the manifest pins them - repo,\nrevision, file and sha256 - and <code>ffrwd install</code> fetches and verifies\nthem. All three are fp32 ONNX exports made with Roboflow's own\nexporter from their checkpoints, and live in\n<a href=\"https://huggingface.co/imbcmdth/rfdetr-onnx\">imbcmdth/rfdetr-onnx</a>\nwith the checkpoint hashes and the export scripts beside them: RF-DETR\nLarge at 704x704 for detection, RF-DETR Seg Large at 504x504 for\nsegmentation and RF-DETR Medium at 576x576 for faces, about 393 MB\ntogether, run through <code>wasi:nn</code> on the machine's own ONNX Runtime.</p>\n",
+      "capabilities": [
+        "nn"
+      ],
+      "engines_ffrwd": null,
+      "homepage": "https://github.com/imbcmdth/ffrwd-package-rfdetr",
+      "models": {
+        "detect": {
+          "file": "rf-detr-large-2026.onnx",
+          "repo": "imbcmdth/rfdetr-onnx",
+          "size": 128189032,
+          "sha256": "da7f1bc118c6071b48096149b5df01eb1caeb3bb60a262949ac0e41f7c96f705",
+          "revision": "9690caf9f62195acb985155b2b67224e623e1443"
+        },
+        "detect_faces": {
+          "file": "rf-detr-medium-face.onnx",
+          "repo": "imbcmdth/rfdetr-onnx",
+          "size": 127032882,
+          "sha256": "b594500a99c3a4287805b7afa15eb74ee559be937eb00315768612846f93cc45",
+          "revision": "32130b7778a7eb8f13cf9297e9438bc92c560720"
+        },
+        "segment_mask": {
+          "file": "rf-detr-seg-large.onnx",
+          "repo": "imbcmdth/rfdetr-onnx",
+          "size": 137933860,
+          "sha256": "e6154493b7ba38c285f416db812589267a7292a736fa8564577bcd27a9012e9e",
+          "revision": "9690caf9f62195acb985155b2b67224e623e1443"
+        }
+      },
+      "yanked": false,
+      "published_at": "2026-09-09T14:36:33.685003+00:00"
+    },
+    {
+      "size": 1815374,
+      "sha256": "3556ae9ee00e66240bea880638f21fcb34058e2a7fb671dd10cfbae1fb2bf3e1",
+      "license": "Apache-2.0",
+      "recipes": [
+        {
+          "file": "recipes/blur-people.sql",
+          "name": "blur-people",
+          "usage": "ffrwd run ffrwd/rfdetr:blur-people -v source=street.mp4 -v dest=blurred.mp4",
+          "compiles": true,
+          "optional": [
+            {
+              "name": "sigma",
+              "description": "blur strength, defaults to 12"
+            },
+            {
+              "name": "track",
+              "description": "video track index, defaults to the first"
+            }
+          ],
+          "required": [
+            {
+              "name": "source",
+              "description": "input media path"
+            },
+            {
+              "name": "dest",
+              "description": "output path"
+            }
+          ],
+          "description": "Blur every person the segmentation model finds, on the first video track,"
+        },
+        {
+          "file": "recipes/mosaic-people.sql",
+          "name": "mosaic-people",
+          "usage": "ffrwd run ffrwd/rfdetr:mosaic-people -v source=street.mp4 -v dest=mosaic.mp4",
+          "compiles": true,
+          "optional": [
+            {
+              "name": "size",
+              "description": "mosaic block size, defaults to 16"
+            },
+            {
+              "name": "track",
+              "description": "video track index, defaults to the first"
+            }
+          ],
+          "required": [
+            {
+              "name": "source",
+              "description": "input media path"
+            },
+            {
+              "name": "dest",
+              "description": "output path"
+            }
+          ],
+          "description": "Mosaic every person the segmentation model finds, on the first video"
+        },
+        {
+          "file": "recipes/spotlight.sql",
+          "name": "spotlight",
+          "usage": "ffrwd run ffrwd/rfdetr:spotlight -v source=street.mp4 -v class=person -v dest=spotlit.mp4",
+          "compiles": true,
+          "optional": [
+            {
+              "name": "class",
+              "description": "a COCO class name, e.g. person"
+            },
+            {
+              "name": "dim",
+              "description": "how much the rest darkens, 0 to 1, defaults to 0.6"
+            },
+            {
+              "name": "track",
+              "description": "video track index, defaults to the first"
+            }
+          ],
+          "required": [
+            {
+              "name": "source",
+              "description": "input media path"
+            },
+            {
+              "name": "dest",
+              "description": "output path"
+            }
+          ],
+          "description": "Darken everything but one class of object: the matte keeps its own"
+        },
+        {
+          "file": "recipes/replace-background.sql",
+          "name": "replace-background",
+          "usage": "ffrwd run ffrwd/rfdetr:replace-background -v source=street.mp4 -v background=beach.mp4 -v dest=composited.mp4",
+          "compiles": true,
+          "optional": [
+            {
+              "name": "track",
+              "description": "video track index, defaults to the first"
+            }
+          ],
+          "required": [
+            {
+              "name": "source",
+              "description": "input media path"
+            },
+            {
+              "name": "background",
+              "description": "media whose first video track becomes the backdrop"
+            },
+            {
+              "name": "dest",
+              "description": "output path"
+            }
+          ],
+          "description": "Cut the people out and lay them over a new background, scaled to fit the"
+        },
+        {
+          "file": "recipes/draw.sql",
+          "name": "draw",
+          "usage": "ffrwd run ffrwd/rfdetr:draw -v source=street.mp4 -v dest=boxed.mp4",
+          "compiles": true,
+          "optional": [
+            {
+              "name": "conf",
+              "description": "confidence threshold, defaults to 0.25"
+            },
+            {
+              "name": "track",
+              "description": "video track index, defaults to the first"
+            }
+          ],
+          "required": [
+            {
+              "name": "source",
+              "description": "input media path"
+            },
+            {
+              "name": "dest",
+              "description": "output path"
+            }
+          ],
+          "description": "Draw a box around everything the detector finds, on the first video"
+        },
+        {
+          "file": "recipes/detections.sql",
+          "name": "detections",
+          "usage": "ffrwd run ffrwd/rfdetr:detections -v source=street.mp4 -v dest=objects.ndjson",
+          "compiles": true,
+          "optional": [
+            {
+              "name": "conf",
+              "description": "confidence threshold, defaults to 0.25"
+            },
+            {
+              "name": "track",
+              "description": "video track index, defaults to the first"
+            }
+          ],
+          "required": [
+            {
+              "name": "source",
+              "description": "input media path"
+            },
+            {
+              "name": "dest",
+              "description": "output path, a .ndjson file"
+            }
+          ],
+          "description": "Every detection as NDJSON, one line per object per frame - class,"
+        },
+        {
+          "file": "recipes/blur-faces.sql",
+          "name": "blur-faces",
+          "usage": "ffrwd run ffrwd/rfdetr:blur-faces -v source=class.mp4 -v dest=blurred.mp4",
+          "compiles": true,
+          "optional": [
+            {
+              "name": "conf",
+              "description": "confidence threshold, defaults to 0.25"
+            },
+            {
+              "name": "grow",
+              "description": "pixels added around each box, defaults to 8"
+            },
+            {
+              "name": "feather",
+              "description": "how far the edge softens in pixels, defaults to 4"
+            },
+            {
+              "name": "sigma",
+              "description": "blur strength, defaults to 12"
+            },
+            {
+              "name": "track",
+              "description": "video track index, defaults to the first"
+            }
+          ],
+          "required": [
+            {
+              "name": "source",
+              "description": "input media path"
+            },
+            {
+              "name": "dest",
+              "description": "output path"
+            }
+          ],
+          "description": "Blur every face the detector finds, on the first video track, or the one"
+        },
+        {
+          "file": "recipes/mosaic-faces.sql",
+          "name": "mosaic-faces",
+          "usage": "ffrwd run ffrwd/rfdetr:mosaic-faces -v source=class.mp4 -v dest=mosaic.mp4",
+          "compiles": true,
+          "optional": [
+            {
+              "name": "conf",
+              "description": "confidence threshold, defaults to 0.25"
+            },
+            {
+              "name": "grow",
+              "description": "pixels added around each box, defaults to 8"
+            },
+            {
+              "name": "feather",
+              "description": "how far the edge softens in pixels, defaults to 4"
+            },
+            {
+              "name": "size",
+              "description": "mosaic block size, defaults to 16"
+            },
+            {
+              "name": "track",
+              "description": "video track index, defaults to the first"
+            }
+          ],
+          "required": [
+            {
+              "name": "source",
+              "description": "input media path"
+            },
+            {
+              "name": "dest",
+              "description": "output path"
+            }
+          ],
+          "description": "Mosaic every face the detector finds, on the first video track, or the one"
+        },
+        {
+          "file": "recipes/draw-faces.sql",
+          "name": "draw-faces",
+          "usage": "ffrwd run ffrwd/rfdetr:draw-faces -v source=class.mp4 -v dest=boxed.mp4",
+          "compiles": true,
+          "optional": [
+            {
+              "name": "conf",
+              "description": "confidence threshold, defaults to 0.25"
+            },
+            {
+              "name": "track",
+              "description": "video track index, defaults to the first"
+            }
+          ],
+          "required": [
+            {
+              "name": "source",
+              "description": "input media path"
+            },
+            {
+              "name": "dest",
+              "description": "output path"
+            }
+          ],
+          "description": "Draw a box around every face the detector finds, on the first video"
+        },
+        {
+          "file": "recipes/faces.sql",
+          "name": "faces",
+          "usage": "ffrwd run ffrwd/rfdetr:faces -v source=class.mp4 -v dest=faces.ndjson",
+          "compiles": true,
+          "optional": [
+            {
+              "name": "conf",
+              "description": "confidence threshold, defaults to 0.25"
+            },
+            {
+              "name": "track",
+              "description": "video track index, defaults to the first"
+            }
+          ],
+          "required": [
+            {
+              "name": "source",
+              "description": "input media path"
+            },
+            {
+              "name": "dest",
+              "description": "output path, a .ndjson file"
+            }
+          ],
+          "description": "Every face as NDJSON, one line per face per frame - the class `face`, the"
+        },
+        {
+          "file": "recipes/blur-plates.sql",
+          "name": "blur-plates",
+          "usage": "ffrwd run ffrwd/rfdetr:blur-plates -v source=dashcam.mp4 -v dest=blurred.mp4",
+          "compiles": true,
+          "optional": [
+            {
+              "name": "conf",
+              "description": "confidence threshold, defaults to 0.25"
+            },
+            {
+              "name": "grow",
+              "description": "pixels added around each box, defaults to 8"
+            },
+            {
+              "name": "feather",
+              "description": "how far the edge softens in pixels, defaults to 4"
+            },
+            {
+              "name": "sigma",
+              "description": "blur strength, defaults to 12"
+            },
+            {
+              "name": "track",
+              "description": "video track index, defaults to the first"
+            }
+          ],
+          "required": [
+            {
+              "name": "source",
+              "description": "input media path"
+            },
+            {
+              "name": "dest",
+              "description": "output path"
+            }
+          ],
+          "description": "Blur every plate the detector finds, on the first video track, or the one"
+        },
+        {
+          "file": "recipes/mosaic-plates.sql",
+          "name": "mosaic-plates",
+          "usage": "ffrwd run ffrwd/rfdetr:mosaic-plates -v source=dashcam.mp4 -v dest=mosaic.mp4",
+          "compiles": true,
+          "optional": [
+            {
+              "name": "conf",
+              "description": "confidence threshold, defaults to 0.25"
+            },
+            {
+              "name": "grow",
+              "description": "pixels added around each box, defaults to 8"
+            },
+            {
+              "name": "feather",
+              "description": "how far the edge softens in pixels, defaults to 4"
+            },
+            {
+              "name": "size",
+              "description": "mosaic block size, defaults to 16"
+            },
+            {
+              "name": "track",
+              "description": "video track index, defaults to the first"
+            }
+          ],
+          "required": [
+            {
+              "name": "source",
+              "description": "input media path"
+            },
+            {
+              "name": "dest",
+              "description": "output path"
+            }
+          ],
+          "description": "Mosaic every plate the detector finds, on the first video track, or the one"
+        },
+        {
+          "file": "recipes/draw-plates.sql",
+          "name": "draw-plates",
+          "usage": "ffrwd run ffrwd/rfdetr:draw-plates -v source=dashcam.mp4 -v dest=boxed.mp4",
+          "compiles": true,
+          "optional": [
+            {
+              "name": "conf",
+              "description": "confidence threshold, defaults to 0.25"
+            },
+            {
+              "name": "track",
+              "description": "video track index, defaults to the first"
+            }
+          ],
+          "required": [
+            {
+              "name": "source",
+              "description": "input media path"
+            },
+            {
+              "name": "dest",
+              "description": "output path"
+            }
+          ],
+          "description": "Draw a box around every plate the detector finds, on the first video"
+        },
+        {
+          "file": "recipes/plates.sql",
+          "name": "plates",
+          "usage": "ffrwd run ffrwd/rfdetr:plates -v source=dashcam.mp4 -v dest=plates.ndjson",
+          "compiles": true,
+          "optional": [
+            {
+              "name": "conf",
+              "description": "confidence threshold, defaults to 0.25"
+            },
+            {
+              "name": "track",
+              "description": "video track index, defaults to the first"
+            }
+          ],
+          "required": [
+            {
+              "name": "source",
+              "description": "input media path"
+            },
+            {
+              "name": "dest",
+              "description": "output path, a .ndjson file"
+            }
+          ],
+          "description": "Every plate as NDJSON, one line per plate per frame - the class `plate`, the"
+        },
+        {
+          "file": "recipes/redact.sql",
+          "name": "redact",
+          "usage": "ffrwd run ffrwd/rfdetr:redact -v source=street.mp4 -v dest=redacted.mp4",
+          "compiles": true,
+          "optional": [
+            {
+              "name": "conf",
+              "description": "confidence threshold for both detectors, defaults to 0.25"
+            },
+            {
+              "name": "grow",
+              "description": "pixels added around each box, defaults to 8"
+            },
+            {
+              "name": "feather",
+              "description": "how far the edge softens in pixels, defaults to 4"
+            },
+            {
+              "name": "size",
+              "description": "mosaic block size, defaults to 16"
+            },
+            {
+              "name": "track",
+              "description": "video track index, defaults to the first"
+            }
+          ],
+          "required": [
+            {
+              "name": "source",
+              "description": "input media path"
+            },
+            {
+              "name": "dest",
+              "description": "output path"
+            }
+          ],
+          "description": "Redact the two things a frame most often identifies someone by: every face"
+        }
+      ],
+      "version": "0.3.0",
+      "functions": [
+        {
+          "name": "detect",
+          "export": "src/model.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "conf",
+              "type": "number"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "detect(v video_stream, conf number DEFAULT 0.25)"
+        },
+        {
+          "name": "detect_faces",
+          "export": "src/model.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "conf",
+              "type": "number"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "detect_faces(v video_stream, conf number DEFAULT 0.25)"
+        },
+        {
+          "name": "detect_plates",
+          "export": "src/model.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "conf",
+              "type": "number"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "detect_plates(v video_stream, conf number DEFAULT 0.25)"
+        },
+        {
+          "name": "segment_mask",
+          "export": "src/model.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "class",
+              "type": "text"
+            },
+            {
+              "name": "conf",
+              "type": "number"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "segment_mask(v video_stream, class text DEFAULT NULL, conf number DEFAULT 0.25)"
+        },
+        {
+          "name": "boxes_mask",
+          "export": "src/boxes.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "boxes",
+              "type": "STRUCT(class text, conf number, x number, y number, w number, h number)[]"
+            },
+            {
+              "name": "grow",
+              "type": "number"
+            },
+            {
+              "name": "feather",
+              "type": "number"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "boxes_mask(v video_stream, boxes STRUCT(class text, conf number, x number, y number, w number, h number)[], grow number DEFAULT 0, feather number DEFAULT 0)"
+        },
+        {
+          "name": "draw_boxes",
+          "export": "src/boxes.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "boxes",
+              "type": "STRUCT(class text, conf number, x number, y number, w number, h number)[]"
+            },
+            {
+              "name": "thickness",
+              "type": "number"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "draw_boxes(v video_stream, boxes STRUCT(class text, conf number, x number, y number, w number, h number)[], thickness number DEFAULT 2)"
+        }
+      ],
+      "namespace": "ffrwd",
+      "description": "RF-DETR detection, instance segmentation, face detection and licence plate detection: rows, mattes and the utilities that turn rows into mattes or drawn overlays. The weights are Roboflow's, a third-party face fine-tune and our own plate fine-tune, all Apache-2.0, fetched at install.",
+      "readme_html": "<h1>ffrwd/rfdetr</h1>\n<p>RF-DETR detection, instance segmentation, face detection and licence\nplate detection. Same API as YOLO26: <code>detect</code>, <code>detect_faces</code> and\n<code>detect_plates</code> produce rows, <code>segment_mask</code> produces a matte, the utilities turn rows into mattes or drawn\noverlays, and everything downstream is native ffmpeg.</p>\n<h2>Model exports</h2>\n<ul>\n<li><code>detect(v, conf DEFAULT 0.25)</code> returns\n<code>STRUCT(v video_stream, boxes STRUCT(class text, conf number, x number, y number, w number, h number)[])</code> -\nthe picture untouched, one row per object per frame, boxes in the\nframe's own pixels, classes as COCO label text.</li>\n<li><code>detect_faces(v, conf DEFAULT 0.25)</code> returns the same record with\none row per face, every row's class the text <code>face</code>. A different\nmodel behind the same shape, so <code>boxes_mask</code>, <code>draw_boxes</code> and the\ngather spelling below read its rows unchanged.</li>\n<li><code>detect_plates(v, conf DEFAULT 0.25)</code> returns the same record again\nwith one row per licence plate, every row's class the text <code>plate</code>.</li>\n<li><code>segment_mask(v, class DEFAULT NULL, conf DEFAULT 0.25)</code> returns the\nfound instances as one grayscale matte, optionally narrowed to one\nclass name.</li>\n</ul>\n<p>A DETR head returns no duplicates, so there is no NMS anywhere; the\nmodule resizes each frame to the model's square, normalizes it, and\nreads the boxes and per-query masks back. Narrow <code>detect</code>'s rows at\nrun time with the gather spelling:</p>\n<pre><code class=\"language-sql\">ARRAY(SELECT r FROM unnest(ffrwd.rfdetr.detect(v).boxes) r\n      WHERE r.class = 'person' AND r.conf &gt;= 0.5)\n</code></pre>\n<h2>Faces</h2>\n<p><code>detect_faces</code> is for the face itself, not the person around it: the\nbox it returns is the head, which is what a privacy blur has to cover\nand what an age or identity model reads. COCO has no face class, so\nthis is a second RF-DETR, Medium size, fine-tuned for one class.</p>\n<p>It runs at a single 576x576 pass over the whole frame, so how much of\nthe frame a face fills decides whether it is found. On WIDER FACE's\nvalidation set, at the default confidence, it finds 98 in 100 faces\nover 96 px across, 82 in 100 between 32 and 96 px, and 17 in 100\nunder 32 px. Footage where the faces that matter are small - a wide\nshot of a room - wants a closer camera or a crop before the\ndetector, not a lower threshold.</p>\n<p>One answer the head gives is not a face: on a crowd it sometimes\nreturns a box covering nearly the whole frame at a middling\nconfidence. A face is taller than it is wide, so the module drops a\nbox that is both wider than 1.3 times its height and larger than a\nquarter of the frame. A wide box that is small, a face half behind\nsomething, stays; so does a large box that is tall, a face close to\nthe camera.</p>\n<p>For a blur, pad the box: <code>boxes_mask</code>'s <code>grow</code> adds pixels around\neach face, and its <code>feather</code> softens the edge, so hair and the jaw\nline go with the face. The <code>blur-faces</code> recipe defaults to 8 and 4.</p>\n<h2>Plates</h2>\n<p><code>detect_plates</code> finds the licence plate itself, the rectangle a\nredaction has to cover, on any vehicle from any angle the plate is\nlegible from. COCO has no plate class either, so this is a third\nRF-DETR, Medium size, fine-tuned for one class - by us, on Open Images'\n&quot;Vehicle registration plate&quot; boxes, since no plate fine-tune with a\nlicence the registry could carry existed.</p>\n<p>It runs at a single 576x576 pass over the whole frame, so how much of\nthe frame a plate fills decides whether it is found. On Open Images'\nown test split, at the default confidence, it finds 98 in 100 plates\nover 96 px across, 96 in 100 between 32 and 96 px, and 47 in 100 under\n32 px, and 91 of every 100 boxes it returns are plates. A plate small\nin a wide shot - the far lane of a dashcam, the back of a car park -\nwants a crop before the detector, not a lower threshold; a plate at\nnight or under a headlight's glare is the other thing this training\ndata had few of.</p>\n<p>Unlike a face, a plate is wider than it is tall, so the crowd rule\nabove does not apply here: a wide box that is a quarter of the frame is\na plate close to the camera, and it stays.</p>\n<p>For a mosaic, pad the box the same way: the <code>blur-plates</code> and\n<code>mosaic-plates</code> recipes default <code>grow</code> to 8 and <code>feather</code> to 4, so the\nplate's frame and the screws go with it. <code>redact</code> masks faces and\nplates in one pass, the plates over the frame the faces were already\nmasked on.</p>\n<h2>Utilities</h2>\n<ul>\n<li><code>boxes_mask(v, boxes, grow DEFAULT 0, feather DEFAULT 0)</code> - the rows\nrasterized into a matte; <code>grow</code> pads each box in pixels, <code>feather</code>\nsoftens the edge.</li>\n<li><code>draw_boxes(v, boxes, thickness DEFAULT 2)</code> - the boxes drawn on the\npicture.</li>\n</ul>\n<h2>Composition</h2>\n<p>The composition layer lives in <code>ffrwd/mask_tools</code> - <code>blur_where</code>,\n<code>mosaic_where</code>, <code>spotlight</code>, <code>cutout</code> and the <code>masked</code> spelling they\nshare - because it is model-agnostic: any grayscale matte beside any\nstream, all native ffmpeg.</p>\n<h2>Recipes</h2>\n<p>People: <code>blur-people</code>, <code>mosaic-people</code>, <code>spotlight</code>,\n<code>replace-background</code>, <code>draw</code>, <code>detections</code>. Faces: <code>blur-faces</code>,\n<code>mosaic-faces</code>, <code>draw-faces</code>, <code>faces</code>. Plates: <code>blur-plates</code>,\n<code>mosaic-plates</code>, <code>draw-plates</code>, <code>plates</code>. Both at once: <code>redact</code>. Run\n<code>ffrwd list ffrwd/rfdetr</code> for each one's variables, or read the header\nof the recipe file.</p>\n<pre><code>ffrwd run ffrwd/rfdetr:blur-people -v source=street.mp4 -v dest=blurred.mp4\nffrwd run ffrwd/rfdetr:blur-faces -v source=class.mp4 -v dest=blurred.mp4\nffrwd run ffrwd/rfdetr:redact -v source=dashcam.mp4 -v dest=redacted.mp4\n</code></pre>\n<h2>Building</h2>\n<p>The modules build against the wit from the installed <code>ffrwd/wasm</code>\npackage, and the ones that read a picture take the frame as <code>rgba</code>,\nconverted upstream by ffmpeg with the stream's own range and matrix,\nand turn it into the model's tensor with the\n<a href=\"https://github.com/imbcmdth/ffrwd-frame\">ffrwd-frame</a> crate:</p>\n<pre><code>ffrwd install -g ffrwd/wasm\ncargo build --target wasm32-wasip2 --release\n</code></pre>\n<h2>License</h2>\n<p>This package is <strong>Apache-2.0</strong>, and so are the weights. RF-DETR is\nRoboflow's real-time detection transformer; its Nano through Large\nsizes are released under Apache-2.0, and this package pins two of the\nLarge ones. The face detector is RF-DETR Medium as fine-tuned by\n<a href=\"https://huggingface.co/Herojayjay/RFDETR-Face-Detection\">Herojayjay/RFDETR-Face-Detection</a>,\nalso Apache-2.0, on a Kaggle face dataset of about 16,700 images. The\nplate detector is RF-DETR Medium fine-tuned by us, from Roboflow's\nMedium checkpoint, on Open Images V7's &quot;Vehicle registration plate&quot;\nboxes - annotations CC BY 4.0, images CC BY 2.0 - and released under\nthe same Apache-2.0.</p>\n<p>The weights are not in the archive: the manifest pins them - repo,\nrevision, file and sha256 - and <code>ffrwd install</code> fetches and verifies\nthem. All four are fp32 ONNX exports made with Roboflow's own\nexporter from their checkpoints, and live in\n<a href=\"https://huggingface.co/imbcmdth/rfdetr-onnx\">imbcmdth/rfdetr-onnx</a>\nwith the checkpoint hashes and the export scripts beside them: RF-DETR\nLarge at 704x704 for detection, RF-DETR Seg Large at 504x504 for\nsegmentation and RF-DETR Medium at 576x576 for faces and again for\nplates, about 520 MB together, run through <code>wasi:nn</code> on the machine's\nown ONNX Runtime.</p>\n",
+      "capabilities": [
+        "nn"
+      ],
+      "engines_ffrwd": null,
+      "homepage": "https://github.com/imbcmdth/ffrwd-package-rfdetr",
+      "models": {
+        "detect": {
+          "file": "rf-detr-large-2026.onnx",
+          "repo": "imbcmdth/rfdetr-onnx",
+          "size": 128189032,
+          "sha256": "da7f1bc118c6071b48096149b5df01eb1caeb3bb60a262949ac0e41f7c96f705",
+          "revision": "9690caf9f62195acb985155b2b67224e623e1443"
+        },
+        "detect_faces": {
+          "file": "rf-detr-medium-face.onnx",
+          "repo": "imbcmdth/rfdetr-onnx",
+          "size": 127032882,
+          "sha256": "b594500a99c3a4287805b7afa15eb74ee559be937eb00315768612846f93cc45",
+          "revision": "32130b7778a7eb8f13cf9297e9438bc92c560720"
+        },
+        "segment_mask": {
+          "file": "rf-detr-seg-large.onnx",
+          "repo": "imbcmdth/rfdetr-onnx",
+          "size": 137933860,
+          "sha256": "e6154493b7ba38c285f416db812589267a7292a736fa8564577bcd27a9012e9e",
+          "revision": "9690caf9f62195acb985155b2b67224e623e1443"
+        },
+        "detect_plates": {
+          "file": "rf-detr-medium-plate.onnx",
+          "repo": "imbcmdth/rfdetr-onnx",
+          "size": 126302012,
+          "sha256": "2597bc5f0f71e2a6c8da3983367d774599d0e587b2e298238fd8fb71bd1af337",
+          "revision": "0f5efd86f1c71b5b148a340fce2c3679f4800df1"
+        }
+      },
+      "yanked": false,
+      "published_at": "2026-09-10T15:25:10.268702+00:00"
+    }
+  ]
+}

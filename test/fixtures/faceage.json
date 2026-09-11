@@ -1,0 +1,220 @@
+{
+  "format_version": 2,
+  "name": "ffrwd/faceage",
+  "versions": [
+    {
+      "size": 506926,
+      "sha256": "b1e9d7d8eff5cef6f40b60bd32232e242ee70c8b51061aa027f7eaea2dbc950f",
+      "license": "Apache-2.0",
+      "recipes": [
+        {
+          "file": "recipes/blur-children.sql",
+          "name": "blur-children",
+          "usage": "ffrwd run ffrwd/faceage:blur-children -v source=class.mp4 -v max_age=16 -v dest=blurred.mp4",
+          "compiles": true,
+          "optional": [
+            {
+              "name": "max_age",
+              "description": "faces estimated younger than this are blurred; required, 16 is what this recipe was built for"
+            },
+            {
+              "name": "conf",
+              "description": "confidence threshold, defaults to 0.25"
+            },
+            {
+              "name": "grow",
+              "description": "pixels added around each box, defaults to 8"
+            },
+            {
+              "name": "feather",
+              "description": "how far the edge softens in pixels, defaults to 4"
+            },
+            {
+              "name": "sigma",
+              "description": "blur strength, defaults to 12"
+            },
+            {
+              "name": "hold",
+              "description": "frames a face the detector lost is carried for, defaults to 5"
+            },
+            {
+              "name": "every",
+              "description": "frames between one face's scores, defaults to 1"
+            },
+            {
+              "name": "track",
+              "description": "video track index, defaults to the first"
+            }
+          ],
+          "required": [
+            {
+              "name": "source",
+              "description": "input media path"
+            },
+            {
+              "name": "dest",
+              "description": "output path"
+            }
+          ],
+          "description": "Blur the children and leave everyone else alone: every face the detector"
+        },
+        {
+          "file": "recipes/mosaic-children.sql",
+          "name": "mosaic-children",
+          "usage": "ffrwd run ffrwd/faceage:mosaic-children -v source=class.mp4 -v max_age=16 -v dest=mosaic.mp4",
+          "compiles": true,
+          "optional": [
+            {
+              "name": "max_age",
+              "description": "faces estimated younger than this are mosaicked; required, 16 is what this recipe was built for"
+            },
+            {
+              "name": "conf",
+              "description": "confidence threshold, defaults to 0.25"
+            },
+            {
+              "name": "grow",
+              "description": "pixels added around each box, defaults to 8"
+            },
+            {
+              "name": "feather",
+              "description": "how far the edge softens in pixels, defaults to 4"
+            },
+            {
+              "name": "size",
+              "description": "mosaic block size, defaults to 16"
+            },
+            {
+              "name": "hold",
+              "description": "frames a face the detector lost is carried for, defaults to 5"
+            },
+            {
+              "name": "every",
+              "description": "frames between one face's scores, defaults to 1"
+            },
+            {
+              "name": "track",
+              "description": "video track index, defaults to the first"
+            }
+          ],
+          "required": [
+            {
+              "name": "source",
+              "description": "input media path"
+            },
+            {
+              "name": "dest",
+              "description": "output path"
+            }
+          ],
+          "description": "Mosaic the children and leave everyone else alone: every face the detector"
+        },
+        {
+          "file": "recipes/ages.sql",
+          "name": "ages",
+          "usage": "ffrwd run ffrwd/faceage:ages -v source=class.mp4 -v dest=ages.ndjson",
+          "compiles": true,
+          "optional": [
+            {
+              "name": "conf",
+              "description": "confidence threshold, defaults to 0.25"
+            },
+            {
+              "name": "hold",
+              "description": "frames a face the detector lost is carried for, defaults to 5"
+            },
+            {
+              "name": "every",
+              "description": "frames between one face's scores, defaults to 1"
+            },
+            {
+              "name": "track",
+              "description": "video track index, defaults to the first"
+            }
+          ],
+          "required": [
+            {
+              "name": "source",
+              "description": "input media path"
+            },
+            {
+              "name": "dest",
+              "description": "output path, a .ndjson file"
+            }
+          ],
+          "description": "Every face with its age as NDJSON, one line per face per frame - the class"
+        }
+      ],
+      "version": "0.1.0",
+      "functions": [
+        {
+          "name": "ages",
+          "export": "src/model.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "boxes",
+              "type": "STRUCT(class text, conf number, x number, y number, w number, h number)[]"
+            },
+            {
+              "name": "hold",
+              "type": "number"
+            },
+            {
+              "name": "every",
+              "type": "number"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "ages(v video_stream, boxes STRUCT(class text, conf number, x number, y number, w number, h number)[], hold number DEFAULT 5, every number DEFAULT 1)"
+        },
+        {
+          "name": "faces_mask",
+          "export": "src/faces.sql",
+          "params": [
+            {
+              "name": "v",
+              "type": "video_stream"
+            },
+            {
+              "name": "faces",
+              "type": "STRUCT(class text, conf number, x number, y number, w number, h number, age number)[]"
+            },
+            {
+              "name": "grow",
+              "type": "number"
+            },
+            {
+              "name": "feather",
+              "type": "number"
+            }
+          ],
+          "returns": "video_stream",
+          "written": "faces_mask(v video_stream, faces STRUCT(class text, conf number, x number, y number, w number, h number, age number)[], grow number DEFAULT 0, feather number DEFAULT 0)"
+        }
+      ],
+      "namespace": "ffrwd",
+      "description": "Ages on the faces ffrwd/rfdetr finds, for blurring the children in a video and nobody else: one row per face with an age, followed across frames, and a matte for the rows a query keeps. The weights are TrungTran's FaceAge ClientScan (Apache-2.0, built with DINOv3), fetched at install.",
+      "readme_html": "<h1>ffrwd/faceage</h1>\n<p>Ages on faces, for blurring the children in a video and nobody else.\n<code>ages</code> takes the face boxes <code>ffrwd/rfdetr</code>'s <code>detect_faces</code> puts\nbeside the picture and returns the same boxes with an age on each;\nthe query keeps the rows under an age; <code>faces_mask</code> turns those into a\nmatte; and <code>ffrwd/mask_tools</code> blurs or mosaics where the matte says.\nEverything downstream of the model is native ffmpeg.</p>\n<pre><code>ffrwd run ffrwd/faceage:blur-children -v source=class.mp4 -v max_age=16 -v dest=blurred.mp4\n</code></pre>\n<h2>Model export</h2>\n<ul>\n<li><code>ages(v, boxes, hold DEFAULT 5, every DEFAULT 1)</code> returns\n<code>STRUCT(v video_stream, faces STRUCT(class text, conf number, x number, y number, w number, h number, age number)[])</code> -\nthe picture untouched, and every face row it was handed with <code>age</code>\nadded, in years to one decimal. <code>boxes</code> is the record <code>detect_faces</code>\nreturns, so the call is written <code>ages(ffrwd.rfdetr.detect_faces(v))</code>.</li>\n</ul>\n<p>A face is not scored afresh every frame. The module follows boxes from\none frame to the next by overlap, and the age a row carries is the\nmean of that face's last thirty scores, so the number settles instead\nof jittering between frames. <code>every</code> is how many frames apart one face\nis scored - the work is one inference per face per <code>every</code> frames -\nand <code>hold</code> keeps a face the detector lost for that many frames,\nre-emitted at its last box, so a blur does not flicker off for the one\nframe a head turns. Both are for video: on a slideshow of unrelated\nstills set <code>hold</code> to 0, or a face in the same place on the next still\nis taken for the same person.</p>\n<p>The graph reads a crop of each box padded by ten percent on every\nside, resized to 224x224 the way the model was trained, off the frame\nffmpeg hands the module already converted to RGB with the stream's own\nrange and matrix. It also carries a gender head, which this module\ndoes not read.</p>\n<h2>Choosing <code>max_age</code></h2>\n<p>The recipes keep a face when its estimated age is under <code>max_age</code>.\nThat predicate is evaluated per row while the modules run and holds a\nliteral alone, so <code>max_age</code> has no default and has to be given.</p>\n<p>Pick it with a margin. The model's error is smallest where it\nmatters here: on its own benchmark it is 1.5 years off on ages 0 to 12\nand 2.9 on 13 to 17, and on a check of sixty labelled faces through\nthis package it was 1.3 years off under 16, with no child estimated\nover 25 and no adult under 16. For a room of young children and adult\nteachers, 16 leaves every child well inside the line and every adult\nwell outside it. Where teenagers and young adults share the frame the\nline is closer and the error matters more; the <code>ages</code> recipe prints\nevery face with its estimate, which is how to see where a threshold\nlands before committing to it.</p>\n<p>Missing a face is the error that costs, so keep <code>conf</code> low and lean\non the margin rather than the threshold. Faces the detector never\nfinds are never blurred: see the <code>ffrwd/rfdetr</code> README for how face\nsize in the frame decides that.</p>\n<h2>Utility</h2>\n<ul>\n<li><code>faces_mask(v, faces, grow DEFAULT 0, feather DEFAULT 0)</code> - the rows\nrasterized into a matte; <code>grow</code> pads each box in pixels, <code>feather</code>\nsoftens the edge. It exists because <code>boxes_mask</code> in <code>ffrwd/rfdetr</code>\ndeclares the six-field row and the compiler wants an exact match;\nthis one takes the seven-field row <code>ages</code> returns.</li>\n</ul>\n<h2>Recipes</h2>\n<ul>\n<li><code>blur-children</code> - every face aged, the ones under <code>max_age</code> blurred.\n<code>max_age</code> is required; <code>conf</code>, <code>grow</code>, <code>feather</code>, <code>sigma</code>, <code>hold</code>,\n<code>every</code> and <code>track</code> are optional.</li>\n<li><code>mosaic-children</code> - the same with a mosaic, <code>size</code> in place of\n<code>sigma</code>.</li>\n<li><code>ages</code> - every face with its age as NDJSON, one line per face per\nframe, no video written.</li>\n</ul>\n<p>Run <code>ffrwd list ffrwd/faceage</code> for each one's variables, or read the\nheader of the recipe file. To blur every face regardless of age, use\n<code>ffrwd/rfdetr</code>'s <code>blur-faces</code>; under HIPAA a full-face image is an\nidentifier at any age, and the age filter here is for a policy that\nexempts consenting adults.</p>\n<h2>Running it</h2>\n<p>The age model is a 300M-parameter transformer run once per face per\n<code>every</code> frames. On an RTX 4090 through CUDA that is about five\nmilliseconds a face, so ten faces at 30 frames a second cost about a\nsecond and a half of GPU time per second of video at <code>every</code> 1, and a\nthird of a second at <code>every</code> 5, where the estimate is the same to a\ntenth of a year.</p>\n<p>DirectML loads this graph and then fails inside the backbone on its\nfirst inference, so the model's pin says <code>not_on: directml</code> and the\nsidecar's GPU walk skips it: on Windows that lands on CUDA, and on a\nmachine without it the CPU runs the model at about seven times the\nwall clock.</p>\n<p>The module is declared impure on purpose: a tracker carries state\nfrom one frame to the next, and sharing the stream among parallel\ninstances would hand each of them every other frame, where two people\nin one place are one face by overlap.</p>\n<h2>Building</h2>\n<p>The modules build against the wit from the installed <code>ffrwd/wasm</code>\npackage and crop, resize and normalize with the\n<a href=\"https://github.com/imbcmdth/ffrwd-frame\">ffrwd-frame</a> crate. The\npackage depends on <code>ffrwd/rfdetr</code> 0.2.0 for <code>detect_faces</code>:</p>\n<pre><code>ffrwd install -g ffrwd/wasm\ncargo build --target wasm32-wasip2 --release\nffrwd install\n</code></pre>\n<h2>License</h2>\n<p>This package is <strong>Apache-2.0</strong>, and so are the weights. The age model\nis <a href=\"https://huggingface.co/TrungTran/faceage_ClientScan\">FaceAge ClientScan</a>,\nTrungTran's DINOv3 ViT-L/16 with a CORAL ordinal-regression head,\nreleased under Apache-2.0. Built with DINOv3: the backbone is Meta's,\nunder the <a href=\"https://huggingface.co/imbcmdth/faceage-onnx/blob/main/DINOv3_LICENSE.md\">DINOv3 License</a>,\nwhich permits this use and asks that the license travel with the\nmodel and that the attribution be shown.</p>\n<p>The weights are not in the archive: the manifest pins them - repo,\nrevision, file and sha256 - and <code>ffrwd install</code> fetches and verifies\nthem. The pinned file is the source's fp32 ONNX halved to fp16 with\nits input and outputs left fp32, 612 MB, and lives in\n<a href=\"https://huggingface.co/imbcmdth/faceage-onnx\">imbcmdth/faceage-onnx</a>\nwith the conversion scripts, the validation against the source (a\nmean age difference of 0.012 years) and the license beside it, run\nthrough <code>wasi:nn</code> on the machine's own ONNX Runtime.</p>\n",
+      "capabilities": [
+        "nn"
+      ],
+      "engines_ffrwd": null,
+      "homepage": "https://github.com/imbcmdth/ffrwd-package-faceage",
+      "models": {
+        "ages": {
+          "file": "faceage-dino-fp16.onnx",
+          "repo": "imbcmdth/faceage-onnx",
+          "size": 611872451,
+          "sha256": "b2e804783e197066cd8cf65a7cbc39a0579ea87c34660abd8ca942df8672cf70",
+          "revision": "0e71b69830e460cb1c7d1d3085c277f3b17c4f2c"
+        }
+      },
+      "yanked": false,
+      "published_at": "2026-09-09T14:38:27.396653+00:00"
+    }
+  ]
+}
