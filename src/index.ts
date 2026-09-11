@@ -22,6 +22,20 @@
  * const blob = await job.download("out.mp4");
  * ```
  *
+ * `submit` is also three steps a caller can take one at a time, which is how a
+ * web app splits the work: `ffrwd.prepare` and `ffrwd.ready` hold the token and
+ * run on a server, while `upload` needs only the signed url the prepare
+ * answered and runs in the page.
+ *
+ * ```ts
+ * // on the server
+ * const prepared = await ffrwd.prepare({ query, inputs: { "in.mp4": { bytes: size } } });
+ * // in the browser, with JSON.parse(JSON.stringify(prepared))
+ * await upload(prepared.uploads[0], file, { onProgress: (p) => bar(p.sent / p.total) });
+ * // on the server again
+ * const job = await ffrwd.ready(prepared);
+ * ```
+ *
  * @packageDocumentation
  */
 
@@ -29,14 +43,21 @@ export { FfrwdError } from "./errors.js";
 export {
   CLIENT_VERSION,
   DEFAULT_API_URL,
+  DEFAULT_OUTPUTS_EXPIRE_DAYS,
   DEFAULT_POLL_MS,
   Ffrwd,
   JOB_FORMAT_VERSION,
   Job,
   type Auth,
   type FfrwdOptions,
+  type PrepareOptions,
+  type PrepareSpec,
+  type Prepared,
+  type PreparedJob,
+  type ReadyOptions,
   type SubmitOptions,
   type SubmitSpec,
+  type UploadTicket,
   type WaitOptions,
 } from "./jobs.js";
 export {
@@ -53,7 +74,12 @@ export {
 export { copyDestinations } from "./query.js";
 export { declaredVariables, referenced, substitute, type Substitution, type Variable } from "./vars.js";
 export { byteLength, isBytes, sha256Hex, type Bytes } from "./bytes.js";
-export { hasUploadProgress } from "./upload.js";
+export {
+  hasUploadProgress,
+  upload,
+  type Destination,
+  type UploadOptions,
+} from "./upload.js";
 export type { FetchLike } from "./http.js";
 export {
   ACTIVE_STATES,
@@ -71,6 +97,7 @@ export {
   type Manifest,
   type Output,
   type PackageDetail,
+  type Progress,
   type Recipe,
   type RecipeEntry,
   type RecipeVariable,
@@ -80,6 +107,7 @@ export {
   type SubmitBody,
   type SubmitInput,
   type Upload,
+  type UploadEntry,
   type UploadProgress,
   type VersionEntry,
 } from "./types.js";

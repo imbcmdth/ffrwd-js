@@ -41,10 +41,10 @@ Zero dependencies, ESM only, TypeScript types included. Needs `fetch`,
    Pass `lock` to send one built elsewhere instead.
 3. **Inputs.** `inputs` maps each path the query names to its bytes, a
    `Blob` or a `Uint8Array`, or to `{ url }` for something the runner
-   fetches itself. Each file is hashed with SHA-256, named in the
-   submit by digest, and PUT to the url the answer signs for it, with
-   nothing but its length. A digest the answer leaves out is refused
-   before a byte is sent.
+   fetches itself. A file is named in the submit by its position and
+   size, nothing is hashed, and it is PUT to the url the answer signs
+   for that position, with nothing but its length. A position the
+   answer leaves out is refused before a byte is sent.
 4. **Ready.** Once every upload is in, the job is marked ready and
    joins the queue. The `Job` that comes back carries the id and what
    the submit said about the account's remaining credit.
@@ -85,13 +85,37 @@ web app that wants to show a recipe's variables or preview the query
 before submitting. They match the CLI's implementation case for case;
 the test fixture was generated from it.
 
+## A server and a browser
+
+`submit` is three calls, and each is public, because the natural web
+shape is a server that holds the token and a browser that holds the
+file:
+
+```ts
+// on the server: substitute, resolve the lock, submit; needs only each file's size
+const prepared = await ffrwd.prepare({ query, inputs: { "in.mp4": { bytes: file.size } } });
+res.json(prepared);                       // plain data; survives JSON
+
+// in the browser: no token, just the signed url
+await upload(prepared.uploads[0], file, { onProgress });
+
+// on the server again: queue it
+const job = await ffrwd.ready(prepared);
+```
+
+`prepare` never reads the file: the API names an input by its position
+in the submit, so the server needs the size and nothing else, and the
+upload can start the moment a file is chosen. `upload` takes any
+`{ url }`, sets only the length, and sends no credential.
+
 ## Progress
 
-In a browser an `onProgress` callback on `submit` gets real upload
-progress, `{ path, sent, total }` per chunk, through
-`XMLHttpRequest`. In Node, or without a callback, the upload is one
-`fetch` PUT and progress fires once when it lands. `hasUploadProgress()`
-says which you have.
+In a browser an `onProgress` callback on `submit` or `upload` gets
+real upload progress per chunk, `{ path, sent, total }` from `submit`
+and `{ sent, total }` from `upload`, through `XMLHttpRequest`. In
+Node, or without a callback, the upload is one `fetch` PUT and
+progress fires once when it lands. `hasUploadProgress()` says which
+you have.
 
 ## Using it from a browser
 

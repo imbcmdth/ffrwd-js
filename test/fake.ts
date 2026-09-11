@@ -168,10 +168,62 @@ export function fakeXhr(status = 200, steps = 2): {
   };
 }
 
+/** The job id every fake answer here is about. */
+export const JOB_ID = "0c2f4a1e-7b3d-4e2a-9f1a-3b5c7d9e1f2a";
+
+/** When the fake's signed urls stop working. Far enough out to be fresh. */
+export const FRESH_UNTIL = "2026-09-12T15:00:00.000Z";
+
+/** The store url a submit signs for the file input at `index`. */
+export function putUrl(index: number): string {
+  return `https://store.example/inputs/${JOB_ID}/${index}?X-Amz-Signature=deadbeef`;
+}
+
+/**
+ * One `uploads` entry per index, as the submit answer writes them.
+ *
+ * `index` is the input's position in the submitted `inputs`, which is the only
+ * part of an entry this client matches on: the `path` written here is the
+ * answer's own echo, and `region` is a key the client does not read at all.
+ */
+export function signed(...indexes: number[]): Array<Record<string, unknown>> {
+  return indexes.map((index) => ({
+    index,
+    path: `the answer's name for input ${index}`,
+    url: putUrl(index),
+    expires_at: FRESH_UNTIL,
+    region: "auto",
+  }));
+}
+
+/**
+ * A submit answer: `uploads` a list, `packages` a map, both always present.
+ *
+ * `uploads` is one entry per file input, in the order the submit listed them;
+ * `packages` is keyed by the digests the spec sent, which this client never
+ * sends, so it is empty unless a test says otherwise.
+ */
+export function submitAnswer(
+  uploads: Array<Record<string, unknown>> = [],
+  over: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    job_id: JOB_ID,
+    uploads,
+    packages: {},
+    ready_url: `https://api.example/functions/v1/jobs/${JOB_ID}/ready`,
+    outputs_expire_days: 7,
+    pin_output: false,
+    title: null,
+    remaining: { cpu_seconds: 6405, gpu_seconds: 2562 },
+    ...over,
+  };
+}
+
 /** A job row with every column the client reads, overridden as a test needs. */
 export function jobRow(over: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    id: "0c2f4a1e-7b3d-4e2a-9f1a-3b5c7d9e1f2a",
+    id: JOB_ID,
     title: null,
     state: "queued",
     recipe: null,

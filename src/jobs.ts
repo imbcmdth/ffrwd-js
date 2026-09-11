@@ -2,9 +2,15 @@
  * Jobs: submitting one, following it, and taking what it wrote.
  *
  * The flow the API asks for, in order: POST the spec, PUT every file input to
- * the presigned url the answer named for its digest, then POST the answer's
- * `ready_url` to join the queue. This module does exactly that and nothing
- * between -- no retries of its own, no polling the caller did not ask for.
+ * the presigned url the answer signed for that input's POSITION in the spec,
+ * then POST the answer's `ready_url` to join the queue. This module does
+ * exactly that and nothing between -- no retries of its own, no polling the
+ * caller did not ask for.
+ *
+ * The three steps are also three public methods. `prepare` and `ready` need the
+ * token and nothing else; `upload`, in `./upload.js`, needs the signed url and
+ * nothing else. That is the seam a web app is built over: a server prepares and
+ * readies, a browser uploads, and no token ever reaches the page.
  */
 
 import { byteLength, isBytes, sha256Hex, type Bytes } from "./bytes.js";
@@ -19,14 +25,15 @@ import type {
   ListQuery,
   Lock,
   Output,
+  Remaining,
   SubmitAnswer,
   SubmitBody,
   SubmitInput,
-  Upload,
+  UploadEntry,
   UploadProgress,
 } from "./types.js";
 import { isTerminal } from "./types.js";
-import { put } from "./upload.js";
+import { upload } from "./upload.js";
 import { declaredVariables, substitute, unsetVariable } from "./vars.js";
 
 /** Where the job API lives. */
@@ -40,6 +47,14 @@ export const CLIENT_VERSION = "ffrwd-js/0.1.0";
 
 /** How often `wait` asks, when the caller does not say. */
 export const DEFAULT_POLL_MS = 3000;
+
+/**
+ * How long outputs live, for an answer that did not say.
+ *
+ * The API sends `outputs_expire_days` with every submit; this is the window the
+ * service documents, carried so a `Prepared` always names one.
+ */
+export const DEFAULT_OUTPUTS_EXPIRE_DAYS = 7;
 
 /**
  * How the caller is authorized: an `ffrwd_…` token with the `run` scope, or a
@@ -88,11 +103,82 @@ export interface SubmitSpec {
   pinOutput?: boolean;
 }
 
-/** What `submit` takes beyond the spec. */
-export interface SubmitOptions {
+/**
+ * What a `prepare` declares, when the bytes are somewhere else.
+ *
+ * A `SubmitSpec` in every part but its inputs, where a file may also be given
+ * as `{bytes: <size>}`: a prepare declares each file's size and nothing more,
+ * so a server can sign the uploads for a file only the browser holds.
+ */
+export interface PrepareSpec extends Omit<SubmitSpec, "inputs"> {
+  /**
+   * The job's inputs, keyed by the path the query names. A `Blob` or
+   * `Uint8Array` declares the bytes it holds; `{bytes: <size>}` declares a file
+   * of that size that something else will upload; a `{url}` is the runner's to
+   * open, and its key must BE that url.
+   */
+  inputs?: Record<string, Bytes | { url: string } | { bytes: number }>;
+}
+
+/** What `prepare` takes beyond the spec. */
+export interface PrepareOptions {
   signal?: AbortSignal;
+}
+
+/** What `ready` takes beyond the prepared job. */
+export interface ReadyOptions {
+  signal?: AbortSignal;
+}
+
+/** What `submit` takes beyond the spec. */
+export interface SubmitOptions extends PrepareOptions {
   /** Heard as each input's bytes go out. See `hasUploadProgress`. */
   onProgress?: (progress: UploadProgress) => void;
+}
+
+/**
+ * Where one file input's bytes go: the signed PUT, and which input it is for.
+ *
+ * `index` is the input's position in the submitted inputs, which is what the
+ * url was signed against; url inputs hold their position, so the indexes can
+ * have gaps. `path` is this client's own, from the spec it sent, never the
+ * answer's. `expiresAt` is empty only for an answer that named no expiry.
+ */
+export interface UploadTicket {
+  index: number;
+  path: string;
+  url: string;
+  expiresAt: string;
+}
+
+/**
+ * A prepared job as plain data: what `JSON.stringify` writes for a `Prepared`.
+ *
+ * Every field is JSON, so a server hands one to a browser as it stands and the
+ * browser hands what comes back to `Ffrwd.ready`.
+ */
+export interface PreparedJob {
+  jobId: string;
+  /** One per file input, in the order the spec declared them. May be empty. */
+  uploads: UploadTicket[];
+  /** Where `ready` posts, which is what queues the job. Bearer-authorized. */
+  readyUrl: string;
+  /** How many days the outputs live once the run succeeds. */
+  outputsExpireDays: number;
+  /** The window's unspent credit, when the answer reported it. */
+  remaining?: Remaining;
+}
+
+/**
+ * What `prepare` answers: the job, and every url its files go to.
+ *
+ * Plain data with a `toJSON` that hands back the same shape, so
+ * `JSON.parse(JSON.stringify(prepared))` is a `PreparedJob` every later step
+ * still takes. It carries no token and nothing private: the signed urls are
+ * write-only, for one job, for 24 hours.
+ */
+export interface Prepared extends PreparedJob {
+  toJSON(): PreparedJob;
 }
 
 /** What `wait` takes. */
@@ -151,6 +237,10 @@ export class Ffrwd {
   /**
    * Submit a job: post the spec, upload its bytes, queue it.
    *
+   * `prepare`, then `upload` for each file input in the order the spec listed
+   * them, then `ready` -- the whole flow, for a caller that holds both the
+   * token and the bytes.
+   *
    * In order, and nothing else in between:
    *
    * 1. The query text is settled -- a recipe's published SQL, or `query` --
@@ -158,26 +248,73 @@ export class Ffrwd {
    *    variables are not all set is refused here, naming the first one.
    * 2. The lock is built: `lock` as given, else a resolve over `packages` and
    *    the recipe's own package, else nothing.
-   * 3. Every `file` input is hashed with SHA-256 and declared with its digest
-   *    and its size. See `sha256Hex` for what that costs in memory.
+   * 3. Every `file` input is declared with its size. Nothing is hashed: the
+   *    answer signs each upload against the input's position.
    * 4. POST `/jobs`.
-   * 5. Every digest is looked up in the answer's `uploads` BEFORE the first
-   *    PUT: a digest the answer left out is an answer this client cannot read,
-   *    not bytes half sent.
-   * 6. Each input is PUT to its url, `onProgress` hearing the bytes.
+   * 5. Every file's url is looked up by its index BEFORE the first PUT: an
+   *    index the answer left out is an answer this client cannot read, not
+   *    bytes half sent.
+   * 6. Each input is PUT to its url, `onProgress` hearing the bytes with the
+   *    input's path.
    * 7. POST the answer's `ready_url`, which queues the job.
    *
    * Refuses when neither or both of `query` and `recipe` are given, when an
-   * input is neither bytes nor a `{url}` whose key is that url, when a required
-   * recipe variable is unset, when the submit answer is missing `job_id`,
-   * `ready_url` or an `uploads` object, and with the API's own words for
-   * anything the service refuses.
+   * input is neither bytes nor a `{url}` whose key is that url, when an input
+   * is the `{bytes}` placeholder only `prepare` takes, when a required recipe
+   * variable is unset, when the submit answer is missing `job_id`, `ready_url`
+   * or an `uploads` list, and with the API's own words for anything the service
+   * refuses.
    */
   async submit(spec: SubmitSpec, options: SubmitOptions = {}): Promise<Job> {
+    // Before the spec goes out: submit sends the bytes itself, so a size
+    // standing in for them is a spec for `prepare`, not for this.
+    const bodies = bytesByPath(spec.inputs ?? {});
+    const prepared = await this.prepare(spec, options);
+    for (const ticket of prepared.uploads) {
+      const body = bodies.get(ticket.path);
+      if (body === undefined) {
+        throw malformed(
+          `the submit answer named an upload for '${ticket.path}', ` +
+            "which this submit did not declare",
+        );
+      }
+      await upload(ticket, body, {
+        fetch: this.#client.fetch,
+        signal: options.signal,
+        ...(options.onProgress !== undefined
+          ? {
+              onProgress: (one: { sent: number; total: number }) =>
+                options.onProgress?.({ path: ticket.path, sent: one.sent, total: one.total }),
+            }
+          : {}),
+      });
+    }
+    return this.ready(prepared, options);
+  }
+
+  /**
+   * The first half of a submit: settle the query, resolve the lock, POST
+   * `/jobs`, and answer with the job and the url every file input goes to.
+   *
+   * Steps 1 to 5 of `submit`, and not one byte of any input: a file is declared
+   * by its size alone, so `{bytes: <size>}` is as good as the bytes here. That
+   * is what lets this run on a server for a file only the browser holds -- the
+   * page is handed `prepared.uploads` and calls `upload` for each, with no
+   * token and no API url of its own.
+   *
+   * The job exists after this and sits in the `submitted` state, waiting for its
+   * uploads; it queues when `ready` is posted, and nothing runs until then.
+   *
+   * Refuses everything `submit` refuses about a spec, plus a file input given
+   * as `{bytes}` with anything that is not a byte count, and an answer that
+   * leaves out the index of a file input this spec declared -- before any byte
+   * is sent, since the bytes are not here at all.
+   */
+  async prepare(spec: PrepareSpec, options: PrepareOptions = {}): Promise<Prepared> {
     const variables = spec.variables ?? {};
     const { text, recipePackage } = await this.#queryText(spec, variables);
     const lock = await this.#lock(spec, recipePackage);
-    const { inputs, uploads } = await readInputs(spec.inputs ?? {});
+    const { inputs, files } = readInputs(spec.inputs ?? {});
 
     const body: SubmitBody = {
       format_version: JOB_FORMAT_VERSION,
@@ -187,7 +324,8 @@ export class Ffrwd {
       variables,
       recipe: spec.recipe ?? null,
       lock,
-      // Nothing is packed here: a browser has no linked package to send.
+      // Nothing is packed here: a browser has no linked package to send. The
+      // answer's `packages` map is therefore always empty, and never read.
       packages: [],
       inputs,
       // The syntactic view alone, which is what the API asks for.
@@ -206,32 +344,50 @@ export class Ffrwd {
       signal: options.signal,
     });
     const answer = readSubmitAnswer(answered, where);
-
-    // Every destination before the first PUT.
-    const planned = uploads.map((one) => {
-      const destination = answer.uploads[one.sha256];
-      if (destination === undefined || typeof destination.url !== "string") {
-        throw malformed(
-          `the submit answer carries no upload url for '${one.path}' ` +
-            `(sha256 ${one.sha256})`,
-        );
-      }
-      return { ...one, destination };
+    return asPrepared({
+      jobId: answer.job_id,
+      // Every destination, looked up before anything is uploaded.
+      uploads: tickets(files, answer.uploads),
+      readyUrl: answer.ready_url,
+      outputsExpireDays:
+        typeof answer.outputs_expire_days === "number"
+          ? answer.outputs_expire_days
+          : DEFAULT_OUTPUTS_EXPIRE_DAYS,
+      ...(answer.remaining !== undefined ? { remaining: answer.remaining } : {}),
     });
-    for (const one of planned) {
-      await put(this.#client.fetch, one.destination, one.body, {
-        path: one.path,
-        onProgress: options.onProgress,
-        signal: options.signal,
-      });
+  }
+
+  /**
+   * The last half of a submit: POST the prepared job's `ready_url`, which
+   * queues it.
+   *
+   * Takes what `prepare` answered, or anything carrying its `jobId` and
+   * `readyUrl` -- a `Prepared` that went through `JSON.stringify` and came back
+   * from a browser is exactly that. This is the authorized half again: the
+   * bearer goes out here, so it runs where the token is.
+   *
+   * Post it once every file input's bytes are in the store. A job whose uploads
+   * are not all there is the runner's to fail, not this client's to check.
+   */
+  async ready(
+    prepared: PreparedJob | { jobId: string; readyUrl: string },
+    options: ReadyOptions = {},
+  ): Promise<Job> {
+    const { jobId, readyUrl } = prepared;
+    if (typeof jobId !== "string" || jobId === "" || typeof readyUrl !== "string" || readyUrl === "") {
+      throw refuse(
+        "a job is readied by its `jobId` and its `readyUrl`, and this carries neither",
+        "pass what `prepare` answered, or the object it became through JSON",
+      );
     }
-    await callJson(this.#client.fetch, answer.ready_url, {
+    await callJson(this.#client.fetch, readyUrl, {
       method: "POST",
       json: {},
       token: this.#client.token,
       signal: options.signal,
     });
-    return new Job(this.#client, answer.job_id, answer);
+    const held = "uploads" in prepared && Array.isArray(prepared.uploads) ? prepared : undefined;
+    return new Job(this.#client, jobId, held === undefined ? undefined : asPrepared(held));
   }
 
   /** A handle on a job by id. Makes no request; every method on it does. */
@@ -258,7 +414,7 @@ export class Ffrwd {
 
   /** The query text to submit, and the package a recipe brings with it. */
   async #queryText(
-    spec: SubmitSpec,
+    spec: PrepareSpec,
     variables: Record<string, string>,
   ): Promise<{ text: string; recipePackage: string | null }> {
     if (spec.query !== undefined && spec.recipe !== undefined) {
@@ -301,7 +457,7 @@ export class Ffrwd {
   }
 
   /** The lock text to submit: the caller's, a resolve, or nothing. */
-  async #lock(spec: SubmitSpec, recipePackage: string | null): Promise<string | null> {
+  async #lock(spec: PrepareSpec, recipePackage: string | null): Promise<string | null> {
     if (typeof spec.lock === "string") return spec.lock;
     if (spec.lock !== undefined) return spec.lock.text;
     const specs = [...(recipePackage !== null ? [recipePackage] : []), ...(spec.packages ?? [])];
@@ -319,12 +475,12 @@ export class Ffrwd {
 export class Job {
   /** The job's id. */
   readonly id: string;
-  /** The submit answer this job came from, when it came from a submit here. */
-  readonly submitted?: SubmitAnswer;
+  /** What `prepare` answered, when this job was prepared or submitted here. */
+  readonly submitted?: Prepared;
   readonly #client: Client;
 
-  /** @internal Built by `Ffrwd.submit` and `Ffrwd.job`. */
-  constructor(client: Client, id: string, submitted?: SubmitAnswer) {
+  /** @internal Built by `Ffrwd.submit`, `Ffrwd.ready` and `Ffrwd.job`. */
+  constructor(client: Client, id: string, submitted?: Prepared) {
     this.#client = client;
     this.id = id;
     if (submitted !== undefined) this.submitted = submitted;
@@ -481,50 +637,153 @@ export class Job {
   }
 }
 
-/** The inputs a submit declares, and the bytes it has to send. */
-interface PlannedUpload {
+/** One file input as the spec declared it: where it sits, and how big it is. */
+interface DeclaredFile {
+  /** The entry's position in the submitted `inputs`. */
+  index: number;
   path: string;
-  sha256: string;
-  body: Bytes;
+  bytes: number;
 }
 
-async function readInputs(
-  given: Record<string, Bytes | { url: string }>,
-): Promise<{ inputs: SubmitInput[]; uploads: PlannedUpload[] }> {
+/**
+ * The inputs a spec declares, and which of them are files to upload.
+ *
+ * One entry per key, in the order the object wrote them, which is the order the
+ * answer signs its urls against -- two names over the same bytes are two
+ * inputs, two positions and two uploads, because the runner opens each at the
+ * path the query names. Nothing is read and nothing is hashed: a file is its
+ * size and its position, and `{bytes: <size>}` says both without the bytes.
+ */
+function readInputs(
+  given: Record<string, Bytes | { url: string } | { bytes: number }>,
+): { inputs: SubmitInput[]; files: DeclaredFile[] } {
   const inputs: SubmitInput[] = [];
-  const uploads: PlannedUpload[] = [];
-  const staged = new Set<string>();
+  const files: DeclaredFile[] = [];
   for (const [path, value] of Object.entries(given)) {
     if (isBytes(value)) {
-      const sha256 = await sha256Hex(value);
-      inputs.push({ path, kind: "file", sha256, bytes: byteLength(value) });
-      // One upload per distinct digest: two names over the same bytes are one
-      // object in the store, and the answer carries one url for them.
-      if (!staged.has(sha256)) {
-        staged.add(sha256);
-        uploads.push({ path, sha256, body: value });
-      }
+      const bytes = byteLength(value);
+      files.push({ index: inputs.length, path, bytes });
+      inputs.push({ path, kind: "file", bytes });
       continue;
     }
-    if (value !== null && typeof value === "object" && typeof value.url === "string") {
-      if (value.url !== path) {
-        throw refuse(
-          `input '${path}' is given as the url '${value.url}', and the job ` +
-            "carries only one string for an input",
-          "a url input is opened by the runner at the path the query names, so " +
-            "write the url in the query and key the input by that same url",
-        );
+    if (value !== null && typeof value === "object") {
+      if (typeof (value as { url?: unknown }).url === "string") {
+        const url = (value as { url: string }).url;
+        if (url !== path) {
+          throw refuse(
+            `input '${path}' is given as the url '${url}', and the job ` +
+              "carries only one string for an input",
+            "a url input is opened by the runner at the path the query names, so " +
+              "write the url in the query and key the input by that same url",
+          );
+        }
+        inputs.push({ path, kind: "url" });
+        continue;
       }
-      inputs.push({ path, kind: "url" });
-      continue;
+      if ("bytes" in value) {
+        const size: unknown = (value as { bytes: unknown }).bytes;
+        if (typeof size !== "number" || !Number.isFinite(size) || size < 0) {
+          throw refuse(
+            `input '${path}' is given as {bytes: ${String(size)}}, which is not a size`,
+            "a file declared without its bytes carries the byte count instead, " +
+              "e.g. {bytes: file.size}",
+          );
+        }
+        files.push({ index: inputs.length, path, bytes: size });
+        inputs.push({ path, kind: "file", bytes: size });
+        continue;
+      }
     }
     throw refuse(
       `input '${path}' is neither bytes nor a url`,
-      "an input is a Blob, a Uint8Array, or {url: 'https://…'} for something " +
-        "the runner opens itself",
+      "an input is a Blob, a Uint8Array, {url: 'https://…'} for something the " +
+        "runner opens itself, or -- for `prepare` alone -- {bytes: <size>} for " +
+        "a file something else uploads",
     );
   }
-  return { inputs, uploads };
+  return { inputs, files };
+}
+
+/**
+ * The bytes each file input holds, by path, for the step that sends them.
+ *
+ * Refuses a `{bytes}` placeholder: it declares a file whose bytes are somewhere
+ * else, which `prepare` takes and `submit`, which does the uploading, cannot.
+ * Everything else is left to `readInputs` to accept or refuse, so a spec is
+ * judged in one place.
+ */
+function bytesByPath(
+  given: Record<string, Bytes | { url: string } | { bytes: number }>,
+): Map<string, Bytes> {
+  const bodies = new Map<string, Bytes>();
+  for (const [path, value] of Object.entries(given)) {
+    if (isBytes(value)) {
+      bodies.set(path, value);
+      continue;
+    }
+    if (
+      value !== null &&
+      typeof value === "object" &&
+      "bytes" in value &&
+      typeof (value as { url?: unknown }).url !== "string"
+    ) {
+      throw refuse(
+        `input '${path}' is given as a size, and a submit uploads the bytes itself`,
+        "pass the Blob or the Uint8Array here, or use prepare + upload + ready " +
+          "when the bytes are somewhere else",
+      );
+    }
+  }
+  return bodies;
+}
+
+/**
+ * Where each declared file's bytes go, matched by index.
+ *
+ * The answer's entries are read into a map by `index` and every declared file
+ * looked up in it, so an index the answer left out stops the flow before the
+ * first PUT. The path carried on is the spec's own, not the answer's: the
+ * answer echoes it for messages, and this client matches on position alone.
+ */
+function tickets(files: DeclaredFile[], offered: UploadEntry[]): UploadTicket[] {
+  const signed = new Map<number, UploadEntry>();
+  for (const entry of offered) {
+    if (
+      entry !== null &&
+      typeof entry === "object" &&
+      typeof entry.index === "number" &&
+      typeof entry.url === "string"
+    ) {
+      signed.set(entry.index, entry);
+    }
+  }
+  return files.map((file) => {
+    const found = signed.get(file.index);
+    if (found === undefined) {
+      throw malformed(
+        `the submit answer carries no upload url for '${file.path}' ` +
+          `(the input at index ${file.index})`,
+      );
+    }
+    return {
+      index: file.index,
+      path: file.path,
+      url: found.url,
+      expiresAt: typeof found.expires_at === "string" ? found.expires_at : "",
+    };
+  });
+}
+
+/** A `Prepared` over plain data: the same fields, and a `toJSON` that is them. */
+function asPrepared(data: PreparedJob): Prepared {
+  const held: PreparedJob = {
+    jobId: data.jobId,
+    uploads: data.uploads.map((one) => ({ ...one })),
+    readyUrl: data.readyUrl,
+    outputsExpireDays: data.outputsExpireDays,
+    ...(data.remaining !== undefined ? { remaining: data.remaining } : {}),
+  };
+  return { ...held, toJSON: (): PreparedJob => ({ ...held }) };
 }
 
 /** The submit answer, checked down to the parts the next steps need. */
@@ -532,14 +791,14 @@ function readSubmitAnswer(data: Record<string, unknown>, where: string): SubmitA
   const job_id = requiredString(data, "job_id", where);
   const ready_url = requiredString(data, "ready_url", where);
   const uploads = data["uploads"];
-  if (uploads === null || typeof uploads !== "object" || Array.isArray(uploads)) {
-    throw malformed(`the answer from ${where} has no 'uploads' object`);
+  if (!Array.isArray(uploads)) {
+    throw malformed(`the answer from ${where} has no 'uploads' list`);
   }
   return {
     ...(data as unknown as SubmitAnswer),
     job_id,
     ready_url,
-    uploads: uploads as Record<string, Upload>,
+    uploads: uploads as UploadEntry[],
   };
 }
 

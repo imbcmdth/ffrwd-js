@@ -32,7 +32,9 @@ function world(): FakeServer {
   return fake
     .on("POST", JOBS, {
       status: 201,
-      json: { job_id: JOB_ID, uploads: {}, ready_url: READY },
+      // No file inputs here, so `uploads` is the empty list the answer sends
+      // for a job with nothing to upload; `packages` is always a map.
+      json: { job_id: JOB_ID, uploads: [], packages: {}, ready_url: READY },
     })
     .on("POST", READY, { json: jobRow() });
 }

@@ -47,8 +47,8 @@ const MALFORMED_HINT =
  * An answer this client cannot read: status 0, and a hint that says so.
  *
  * `what` names the part that was wrong -- a missing `job_id`, an `uploads` that
- * is not an object, a digest the answer left out -- so the sentence points at
- * the document rather than at the request.
+ * is not a list, the index of a file input the answer left out -- so the
+ * sentence points at the document rather than at the request.
  */
 export function malformed(what: string): FfrwdError {
   return new FfrwdError({ status: 0, error: what, hint: MALFORMED_HINT });

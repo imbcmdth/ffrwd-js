@@ -147,11 +147,30 @@ export interface Upload {
   expires_at: string;
 }
 
+/**
+ * One signed PUT in a submit answer: which input it is for, and where it goes.
+ *
+ * `index` is the input's position in the submitted `inputs`, which is what the
+ * registry signed the url against. Url inputs hold their position there, so the
+ * indexes of the file inputs can have gaps. `path` is the path as submitted,
+ * for matching and for messages.
+ */
+export interface UploadEntry extends Upload {
+  index: number;
+  path: string;
+}
+
 /** What a submit hands back. */
 export interface SubmitAnswer {
   job_id: string;
-  /** One entry per distinct file input, keyed by sha256. May be empty. */
-  uploads: Record<string, Upload>;
+  /** One entry per `kind: "file"` input, in the order the submit listed them. May be empty. */
+  uploads: UploadEntry[];
+  /**
+   * Signed PUTs for the packed packages the submit named, keyed by digest.
+   * Always sent, and always empty here: this client packs no package, so it
+   * sends `packages: []` and never reads the map back.
+   */
+  packages?: Record<string, Upload>;
   ready_url: string;
   outputs_expire_days?: number;
   pin_output?: boolean;
@@ -159,11 +178,16 @@ export interface SubmitAnswer {
   remaining?: Remaining;
 }
 
-/** One input as the submit declares it. */
+/**
+ * One input as the submit declares it.
+ *
+ * A file input carries its size and nothing more: nothing is hashed before an
+ * upload, and the registry signs the url against the entry's position in
+ * `inputs` rather than against any digest.
+ */
 export interface SubmitInput {
   path: string;
   kind: "file" | "url";
-  sha256?: string;
   bytes?: number;
 }
 
@@ -312,12 +336,16 @@ export interface Lock {
   text: string;
 }
 
-/** How far one upload has got. */
-export interface UploadProgress {
-  /** The input's path, as the query names it. */
-  path: string;
+/** How far one transfer has got. */
+export interface Progress {
   /** Bytes sent so far. */
   sent: number;
   /** Bytes in all. */
   total: number;
+}
+
+/** How far one input's upload has got, and which input it is. */
+export interface UploadProgress extends Progress {
+  /** The input's path, as the query names it. */
+  path: string;
 }

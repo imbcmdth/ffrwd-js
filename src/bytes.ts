@@ -1,6 +1,9 @@
 /**
- * The two ways a caller hands this library bytes, and the digest the API keys
- * an upload by.
+ * The two ways a caller hands this library bytes, and the digest a download is
+ * checked against.
+ *
+ * Nothing on the upload side is hashed: an input is declared by its size and
+ * its position, and the transfer itself is what says the bytes arrived whole.
  */
 
 import { FfrwdError } from "./errors.js";
@@ -24,24 +27,27 @@ export function byteLength(value: Bytes): number {
 /**
  * `value`'s SHA-256, as 64 lowercase hex characters.
  *
- * MEMORY: the whole input is held in one contiguous buffer to be hashed --
+ * What `Job.download` checks an output against: the job records a digest for
+ * everything a run wrote, and the bytes that come back are hashed here before
+ * they are handed on. No input is ever hashed -- an upload is keyed by the
+ * input's position, not by its content.
+ *
+ * MEMORY: the whole value is held in one contiguous buffer to be hashed --
  * `crypto.subtle.digest` has no streaming form, and a `Blob` is read into an
- * `ArrayBuffer` first. That is fine for the size class the job API takes an
- * input in (a single PUT carries at most 5 GB, and a browser tab will run out
- * of room long before that), but it does mean a 2 GB input needs 2 GB of heap
- * for as long as the digest takes. A caller moving files that large wants the
- * CLI, which hashes off the disk in 1 MiB chunks.
+ * `ArrayBuffer` first. That is fine for the size class the job API writes an
+ * output in, but it does mean a 2 GB download needs 2 GB of heap for as long as
+ * the digest takes.
  */
 export async function sha256Hex(value: Bytes): Promise<string> {
   const subtle = globalThis.crypto?.subtle;
   if (subtle === undefined) {
     throw new FfrwdError({
       status: 0,
-      error: "this runtime has no crypto.subtle, so an input cannot be hashed",
+      error: "this runtime has no crypto.subtle, so these bytes cannot be hashed",
       hint:
-        "the job API keys an upload by its sha256: use Node 18 or newer, or a " +
-        "browser page served over https (crypto.subtle is not exposed to an " +
-        "insecure origin)",
+        "a download is checked against the digest the job recorded: use Node 18 " +
+        "or newer, or a browser page served over https (crypto.subtle is not " +
+        "exposed to an insecure origin)",
     });
   }
   // The view itself, offset and length included -- never `value.buffer`, which
