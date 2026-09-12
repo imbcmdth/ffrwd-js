@@ -1,10 +1,14 @@
 /**
  * ffrwd-js: a client for the ffrwd job API, for a browser and for Node.
  *
- * Three things live here. `Registry` reads the public package index -- what is
- * published, what a recipe is, and the lock a job runs against -- and needs no
- * authorization at all. `Ffrwd` submits jobs and hands back a `Job` to follow
- * and to take outputs from. `substitute` and its two companions are the
+ * Three things live here. `Registry` reads the package index -- what is
+ * published, what a recipe is, and the lock a job runs against. The public
+ * index needs no authorization and is asked first; given an `auth`, a package
+ * the public index has no document for is read on the authorized routes
+ * instead, which is the only way a private one can be read at all. `Ffrwd`
+ * submits jobs and hands back a `Job` to follow and to take outputs from, and
+ * hands its own authorization to the registry it builds -- so a caller who
+ * passes a token gets that package for free. `substitute` and its two companions are the
  * query-variable rules, ported from the CLI so that a query written for one
  * runs the same through the other.
  *

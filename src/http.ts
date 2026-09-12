@@ -11,6 +11,24 @@
 
 import { FfrwdError, malformed } from "./errors.js";
 
+/** Where the job API lives. */
+export const DEFAULT_API_URL = "https://api.ffrwd.video/functions/v1";
+
+/**
+ * How the caller is authorized: an `ffrwd_…` token with the `run` scope, or a
+ * signed-in session's JWT. Both travel as `Authorization: Bearer …`; the API
+ * tells them apart itself.
+ *
+ * Both the job client and the registry take one -- the registry because a
+ * package that is not public is readable only by a member of its namespace.
+ */
+export type Auth = { token: string } | { session: string };
+
+/** The bearer `auth` travels as, whichever of the two it is. */
+export function bearer(auth: Auth): string {
+  return "token" in auth ? auth.token : auth.session;
+}
+
 /** The shape of `fetch` this library uses. Any compatible function will do. */
 export type FetchLike = typeof fetch;
 

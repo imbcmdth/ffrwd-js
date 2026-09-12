@@ -15,7 +15,15 @@
 
 import { byteLength, isBytes, sha256Hex, type Bytes } from "./bytes.js";
 import { FfrwdError, malformed, refuse } from "./errors.js";
-import { callJson, type FetchLike, platformFetch, requiredString } from "./http.js";
+import {
+  bearer,
+  callJson,
+  DEFAULT_API_URL,
+  type Auth,
+  type FetchLike,
+  platformFetch,
+  requiredString,
+} from "./http.js";
 import { copyDestinations } from "./query.js";
 import { Registry } from "./registry.js";
 import type {
@@ -36,9 +44,6 @@ import { isTerminal } from "./types.js";
 import { upload } from "./upload.js";
 import { declaredVariables, substitute, unsetVariable } from "./vars.js";
 
-/** Where the job API lives. */
-export const DEFAULT_API_URL = "https://api.ffrwd.video/functions/v1";
-
 /** The submit format this client writes. */
 export const JOB_FORMAT_VERSION = 2;
 
@@ -56,12 +61,9 @@ export const DEFAULT_POLL_MS = 3000;
  */
 export const DEFAULT_OUTPUTS_EXPIRE_DAYS = 7;
 
-/**
- * How the caller is authorized: an `ffrwd_…` token with the `run` scope, or a
- * signed-in session's JWT. Both travel as `Authorization: Bearer …`; the API
- * tells them apart itself.
- */
-export type Auth = { token: string } | { session: string };
+// `Auth` and `DEFAULT_API_URL` live in ./http.js, where the registry can reach
+// them too, and are re-exported here because this is where a caller meets them.
+export { DEFAULT_API_URL, type Auth } from "./http.js";
 
 /** The rest of what an `Ffrwd` takes. */
 export interface FfrwdOptions {
@@ -211,7 +213,7 @@ export class Ffrwd {
   readonly #clientVersion: string;
 
   constructor(options: Auth & FfrwdOptions) {
-    const token = "token" in options ? options.token : options.session;
+    const token = bearer(options);
     if (typeof token !== "string" || token === "") {
       throw refuse(
         "an ffrwd client needs a token or a session to authorize with",
@@ -225,7 +227,16 @@ export class Ffrwd {
       apiUrl: (options.apiUrl ?? DEFAULT_API_URL).replace(/\/+$/, ""),
       token,
     };
-    this.#registry = options.registry ?? new Registry({ fetch: fetchImpl });
+    // The default registry is given this client's own authorization and API
+    // url, so a caller who passed only a token can read the private packages
+    // that token's namespaces publish. A registry passed in is used as given.
+    this.#registry =
+      options.registry ??
+      new Registry({
+        fetch: fetchImpl,
+        auth: "token" in options ? { token: options.token } : { session: options.session },
+        apiUrl: this.#client.apiUrl,
+      });
     this.#clientVersion = options.clientVersion ?? CLIENT_VERSION;
   }
 

@@ -1,7 +1,7 @@
 {
   "name": "ffrwd-js",
-  "version": "0.2.1",
-  "description": "A client for the ffrwd job API: submit a query, upload its inputs, watch it run, take its outputs, and resolve packages against the public registry.",
+  "version": "0.3.0",
+  "description": "A client for the ffrwd job API: submit a query, upload its inputs, watch it run, take its outputs, and resolve packages against the registry, private ones included.",
   "license": "Apache-2.0",
   "type": "module",
   "engines": {
@@ -26,6 +26,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "tsc -p tsconfig.json --noEmit",
     "smoke": "node --experimental-strip-types scripts/smoke.ts",
+    "smoke:private": "node --experimental-strip-types scripts/private.ts",
     "prepare": "tsc -p tsconfig.build.json"
   },
   "keywords": [

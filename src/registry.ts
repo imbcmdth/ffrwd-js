@@ -1,15 +1,42 @@
 /**
- * The public package index: what is published, what it depends on, and the lock
- * a job is run against.
+ * The package index: what is published, what it depends on, and the lock a job
+ * is run against.
  *
- * Every document this reads is public and unauthenticated -- one JSON file per
- * package, plus a `.sources.json` beside it carrying each recipe's SQL and the
- * files the archive published as text. Nothing here needs a token, and nothing
- * here sends one.
+ * The public index is where this reads first, and for a public package it is
+ * where it reads at all -- one JSON file per package, plus a `.sources.json`
+ * beside it carrying each recipe's SQL and the files the archive published as
+ * text. Both documents are unauthenticated, and no token is sent to either.
+ *
+ * A PRIVATE package is not in them. The registry writes those two documents for
+ * public versions only, so a package only its namespace may see has no document
+ * there at all -- which is why a registry with no `auth` answers "no package"
+ * for one. Given `auth`, two authorized routes fill the gap:
+ *
+ *   - the detail document comes from `/private/p/<ns>/<pkg>`, which answers
+ *     over every version the token's namespaces may see;
+ *   - the SQL and the manifest come from the version's ARCHIVE, since there is
+ *     no private sources document. That costs a signing call, a download and a
+ *     gunzip per version, so it happens only when the public sources document
+ *     has nothing for the version asked about. A public package never gets
+ *     there, and never downloads an archive.
+ *
+ * `Ffrwd` hands its own authorization to the registry it builds, so a caller
+ * who passed a token has all of this without asking for it.
  */
 
+import { asText, gunzip, MAX_ARCHIVE_BYTES, readTar } from "./archive.js";
+import { sha256Hex } from "./bytes.js";
 import { FfrwdError, malformed, refuse } from "./errors.js";
-import { type FetchLike, platformFetch, request } from "./http.js";
+import {
+  bearer,
+  callJson,
+  DEFAULT_API_URL,
+  type Auth,
+  type FetchLike,
+  platformFetch,
+  request,
+  requiredString,
+} from "./http.js";
 import type {
   Lock,
   LockEntry,
@@ -35,11 +62,77 @@ const NAME_RE = /^[a-z_][a-z0-9_]*\/[a-z_][a-z0-9_]*$/;
 const VERSION_RE = /^[A-Za-z0-9][A-Za-z0-9.+-]*$/;
 const PUBLISHED_HINT =
   "run a search, or check the name: the index publishes one document per package";
+const NAMESPACE_HINT =
+  "the token's account is not a member of that namespace; mint one that is";
+
+/**
+ * What a missing public document answers with, beyond a plain 404.
+ *
+ * Object storage answers a missing public object with HTTP 400 and a body that
+ * names the 404 the status does not, so the status alone cannot be read as
+ * "there it is not". This is the CLI's own list, and getting it wrong is what
+ * would keep the private fallback below from ever firing.
+ */
+const ABSENT_MARKERS = ["404", "not_found", "NoSuchKey"];
+
+/** True when `status` and `body` together mean the document is not there. */
+function isAbsent(status: number, body: string): boolean {
+  if (status === 404) return true;
+  if (status !== 400) return false;
+  let data: unknown;
+  try {
+    data = JSON.parse(body);
+  } catch {
+    return false;
+  }
+  if (data === null || typeof data !== "object" || Array.isArray(data)) return false;
+  const said = data as Record<string, unknown>;
+  return ["statusCode", "error", "code"].some((key) =>
+    ABSENT_MARKERS.includes(String(said[key])),
+  );
+}
+
+function noSuchPackage(name: string): FfrwdError {
+  return new FfrwdError({
+    status: 404,
+    error: `the registry has no package '${name}'`,
+    hint: PUBLISHED_HINT,
+  });
+}
+
+/**
+ * Which archive members are published as text, matching what a public sources
+ * document carries: the manifest, every `.sql`, and the readme and licence at
+ * the package root.
+ */
+function isPublishedText(path: string): boolean {
+  return (
+    path === "ffrwd.json" ||
+    path.endsWith(".sql") ||
+    /^(README|LICEN[CS]E)(\.[^/]*)?$/.test(path)
+  );
+}
 
 /** How to reach the index. */
 export interface RegistryOptions {
   /** The index's base url. Defaults to the public one. */
   indexUrl?: string;
+  /**
+   * How to authorize for packages that are not public: the same `{token}` or
+   * `{session}` an `Ffrwd` takes.
+   *
+   * Without one, this registry reads the two public documents and nothing else,
+   * and a private package is "no package". With one, a package the public index
+   * has no document for is asked for again on the authorized routes, and its
+   * SQL and manifest are read out of the version's archive. It is never sent to
+   * the public index.
+   */
+  auth?: Auth;
+  /**
+   * The job API's base url, which is where the authorized routes live. Defaults
+   * to the public one. Only reached when `auth` is set.
+   */
+  apiUrl?: string;
   /** The `fetch` to use. Defaults to the platform's. */
   fetch?: FetchLike;
 }
@@ -64,29 +157,47 @@ interface SourcesDocument {
 }
 
 /**
- * The public package index.
+ * The package index.
  *
  * One instance holds no state between calls: every method fetches the
  * documents it needs. `resolve` shares one cache across its own walk, so a
- * package reached twice is fetched once, and that cache is gone when it
- * returns -- two resolves a day apart see two days' worth of publishing.
+ * package reached twice is fetched once -- an archive included -- and that
+ * cache is gone when it returns: two resolves a day apart see two days' worth
+ * of publishing.
+ *
+ * Given `auth`, it also reads the packages that token's namespaces publish
+ * privately. See this module's own notes for what that costs.
  */
 export class Registry {
   /** The index's base url, without a trailing slash. */
   readonly indexUrl: string;
+  /** The job API's base url, where the authorized routes live. */
+  readonly apiUrl: string;
   readonly #fetch: FetchLike;
+  /** The bearer for the authorized routes, or undefined for public-only. */
+  readonly #token: string | undefined;
 
   constructor(options: RegistryOptions = {}) {
     this.indexUrl = (options.indexUrl ?? DEFAULT_INDEX_URL).replace(/\/+$/, "");
+    this.apiUrl = (options.apiUrl ?? DEFAULT_API_URL).replace(/\/+$/, "");
     this.#fetch = options.fetch ?? platformFetch();
+    const token = options.auth === undefined ? "" : bearer(options.auth);
+    this.#token = token === "" ? undefined : token;
   }
 
   /**
-   * One package's detail document: every public version, newest first.
+   * One package's detail document: every version this registry may see, newest
+   * first.
    *
-   * Refuses when the name is not `<namespace>/<package>`, and with a 404 when
-   * the index has no such document -- a package with no public version has
-   * none, which is the same answer as no such package.
+   * The public document first. With `auth`, a package the public index has no
+   * document for is asked for again on the authorized route, which answers over
+   * every version the token's namespaces publish -- and only that second call
+   * carries the bearer.
+   *
+   * Refuses when the name is not `<namespace>/<package>`; with a 404 when
+   * neither route has such a document -- a package with no version this caller
+   * may see is the same answer as no such package -- and with 401 or 403, in
+   * the words the CLI uses, when the token is not in the namespace.
    */
   async package(name: string): Promise<PackageDetail> {
     return this.#detail(name, new Map());
@@ -111,31 +222,20 @@ export class Registry {
    * One version's sources: each recipe's SQL, the published files as text, and
    * the manifest parsed out of them.
    *
-   * Refuses when the package has no `.sources.json`, and when that document
-   * carries no such version. A package that published no SQL has a document
-   * whose entries carry neither `sources` nor `files`; that is not a refusal,
-   * it is an answer with both maps empty and `manifest` null.
+   * The public `.sources.json` is the cheap path and the usual one. With
+   * `auth`, a version that document says nothing about -- a private one, whose
+   * document is never written -- is read out of the version's ARCHIVE instead:
+   * one signing call, one download, one gunzip, and the same shape comes back.
+   * That is the expensive path, and it is taken only when there is nothing to
+   * read otherwise.
+   *
+   * Without `auth`, refuses when the package has no `.sources.json`, and when
+   * that document carries no such version. A package that published no SQL has
+   * a document whose entries carry neither `sources` nor `files`; that is not a
+   * refusal, it is an answer with both maps empty and `manifest` null.
    */
   async sources(name: string, version: string): Promise<Sources> {
-    const document = await this.#sourcesDocument(name, new Map());
-    if (document === null) {
-      throw new FfrwdError({
-        status: 404,
-        error: `the index has no sources document for '${name}'`,
-        hint: "only a package that published SQL has one; there is nothing to read",
-      });
-    }
-    const entry = (document.versions ?? []).find((one) => one.version === version);
-    if (entry === undefined) {
-      throw new FfrwdError({
-        status: 404,
-        error: `the sources document for '${name}' carries no version ${version}`,
-        hint: `published there: ${(document.versions ?? [])
-          .map((one) => one.version ?? "?")
-          .join(", ")}`,
-      });
-    }
-    return this.#sourcesOf(name, entry);
+    return (await this.#sourcesFor(name, version, new Map())).sources;
   }
 
   /**
@@ -143,12 +243,17 @@ export class Registry {
    *
    * `spec` names the package (`"ns/pkg"` or `"ns/pkg@1.2.3"`) and `recipeName`
    * the recipe in it. `required` and `optional` come from the detail document's
-   * `recipes` entry, `text` from the sources document beside it, and `version`
-   * is the version both were read at.
+   * `recipes` entry, `text` from the sources beside it, and `version` is the
+   * version both were read at.
+   *
+   * For a private package this is the whole of the expensive path: the detail
+   * document over the authorized route, then the version's archive for the SQL,
+   * whose member is the one the `recipes` entry's `file` names. A public
+   * package reads two JSON documents and downloads nothing.
    *
    * Refuses when the package publishes no such recipe -- naming the ones it
-   * does -- and when the sources document carries no SQL for it, which is an
-   * index that disagrees with itself.
+   * does -- and when what was read carries no SQL for it, which is an index
+   * that disagrees with itself.
    */
   async recipe(spec: string, recipeName: string): Promise<Recipe> {
     const cache = new Map<string, unknown>();
@@ -163,13 +268,11 @@ export class Registry {
         published ? `it publishes: ${published}` : "it publishes no recipes at all",
       );
     }
-    const document = await this.#sourcesDocument(name, cache);
-    const version = (document?.versions ?? []).find((one) => one.version === entry.version);
-    const text = version?.sources?.[recipeName];
+    const { sources, where } = await this.#sourcesFor(name, entry.version, cache);
+    const text = sources.recipes[recipeName];
     if (typeof text !== "string") {
       throw malformed(
-        `'${name}' ${entry.version} lists a recipe '${recipeName}' the sources ` +
-          "document has no SQL for",
+        `'${name}' ${entry.version} lists a recipe '${recipeName}' ${where} has no SQL for`,
       );
     }
     return {
@@ -196,10 +299,16 @@ export class Registry {
    * depends on -- and an entry carries `dependencies` only when it has some.
    * `text` is the `ffrwd.lock` document, which is what a submit sends.
    *
+   * Nothing about a private package is different here: it pins the same way,
+   * with the same `kind`, digest and store path, and its dependencies are read
+   * out of the manifest in its archive rather than out of a sources document.
+   * The runner signs archives by digest on its own side, so a lock does not
+   * say, and does not need to say, which of its packages were public.
+   *
    * Refuses on a dependency cycle, naming the loop, and on anything `version`
    * refuses. A package whose sources document publishes no manifest is taken to
-   * depend on nothing: the index is all there is to read, and an archive is
-   * never downloaded here.
+   * depend on nothing: that document is all there is to read, and an archive is
+   * downloaded only for a version the document has no entry for at all.
    */
   async resolve(specs: string[]): Promise<Lock> {
     const cache = new Map<string, unknown>();
@@ -298,21 +407,27 @@ export class Registry {
     return found;
   }
 
+  /**
+   * `name`'s detail document, public first.
+   *
+   * A public document that is not there -- a plain 404, or the 400 object
+   * storage answers a missing object with -- is a private package as far as
+   * this can tell, so with a token it is asked for again on the authorized
+   * route. Without one there is nothing else to try. The cache is keyed by name
+   * alone, as it always was: one document per package, wherever it came from.
+   */
   async #detail(name: string, cache: Map<string, unknown>): Promise<PackageDetail> {
     checkName(name);
     const key = `detail:${name}`;
     const held = cache.get(key);
     if (held !== undefined) return held as PackageDetail;
-    const url = `${this.indexUrl}/p/${name}.json`;
-    const response = await request(this.#fetch, url);
-    if (response.status === 404) {
-      throw new FfrwdError({
-        status: 404,
-        error: `the registry has no package '${name}'`,
-        hint: PUBLISHED_HINT,
-      });
+    let url = `${this.indexUrl}/p/${name}.json`;
+    let document = await this.#document(url);
+    if (document === null) {
+      if (this.#token === undefined) throw noSuchPackage(name);
+      url = `${this.apiUrl}/private/p/${name}`;
+      document = await this.#privateDetail(name, url);
     }
-    const document = await readDocument(response, url);
     const versions = document["versions"];
     if (typeof document["name"] !== "string" || !Array.isArray(versions)) {
       throw malformed(`${url} is not a package detail document`);
@@ -330,6 +445,46 @@ export class Registry {
     return detail;
   }
 
+  /**
+   * The detail document the authorized route answers with, or a refusal.
+   *
+   * The only request this makes that carries the bearer, beside the archive
+   * signing below. A 401 or a 403 is the token not being in the namespace,
+   * which is refused in the CLI's own words rather than as a bare status; a 404
+   * here means no route has the package, which is the public answer too.
+   */
+  async #privateDetail(name: string, url: string): Promise<Record<string, unknown>> {
+    try {
+      return await callJson(this.#fetch, url, { token: this.#token });
+    } catch (error) {
+      const status = error instanceof FfrwdError ? error.status : 0;
+      if (status === 401 || status === 403) {
+        throw new FfrwdError({
+          status,
+          error: `this token does not authorize reading '${name}'`,
+          hint: NAMESPACE_HINT,
+        });
+      }
+      if (status === 404) throw noSuchPackage(name);
+      throw error;
+    }
+  }
+
+  /** One public index document, or null when the index does not have it. */
+  async #document(url: string): Promise<Record<string, unknown> | null> {
+    const response = await request(this.#fetch, url);
+    const body = await response.text();
+    if (isAbsent(response.status, body)) return null;
+    if (!response.ok) {
+      throw new FfrwdError({
+        status: response.status,
+        error: `the index refused ${url} with HTTP ${response.status}`,
+        hint: "the index is public; try again, or check the index url",
+      });
+    }
+    return readObject(body, url);
+  }
+
   async #sourcesDocument(
     name: string,
     cache: Map<string, unknown>,
@@ -338,17 +493,158 @@ export class Registry {
     const key = `sources:${name}`;
     if (cache.has(key)) return cache.get(key) as SourcesDocument | null;
     const url = `${this.indexUrl}/p/${name}.sources.json`;
-    const response = await request(this.#fetch, url);
-    if (response.status === 404) {
-      cache.set(key, null);
-      return null;
-    }
-    const document = (await readDocument(response, url)) as SourcesDocument;
+    const document = (await this.#document(url)) as SourcesDocument | null;
     cache.set(key, document);
     return document;
   }
 
-  /** One version's manifest, or null when the index publishes none for it. */
+  /**
+   * One version's sources, and a word for where they were read, which the two
+   * callers put into their own refusals.
+   *
+   * The public document decides: an entry for the version is the answer, and
+   * the archive is not touched. No entry -- a private package, whose document
+   * does not exist, or a version it does not carry -- goes to the archive when
+   * there is a token, and refuses the way it always did when there is not.
+   */
+  async #sourcesFor(
+    name: string,
+    version: string,
+    cache: Map<string, unknown>,
+  ): Promise<{ sources: Sources; where: string }> {
+    const document = await this.#sourcesDocument(name, cache);
+    const entry = (document?.versions ?? []).find((one) => one.version === version);
+    if (entry !== undefined) {
+      return { sources: this.#sourcesOf(name, entry), where: "the sources document" };
+    }
+    if (this.#token !== undefined) {
+      return { sources: await this.#fromArchive(name, version, cache), where: "its archive" };
+    }
+    if (document === null) {
+      throw new FfrwdError({
+        status: 404,
+        error: `the index has no sources document for '${name}'`,
+        hint: "only a package that published SQL has one; there is nothing to read",
+      });
+    }
+    throw new FfrwdError({
+      status: 404,
+      error: `the sources document for '${name}' carries no version ${version}`,
+      hint: `published there: ${(document.versions ?? [])
+        .map((one) => one.version ?? "?")
+        .join(", ")}`,
+    });
+  }
+
+  /** One version's sources, out of its archive. Cached per name and version. */
+  async #fromArchive(
+    name: string,
+    version: string,
+    cache: Map<string, unknown>,
+  ): Promise<Sources> {
+    const key = `archive:${name}@${version}`;
+    const held = cache.get(key);
+    if (held !== undefined) return held as Sources;
+    const detail = await this.#detail(name, cache);
+    const entry = detail.versions.find((one) => one.version === version);
+    if (entry === undefined) {
+      throw refuse(
+        `the registry has no version ${version} of '${name}'`,
+        `published: ${detail.versions.map((one) => one.version).join(", ")}`,
+      );
+    }
+    const sources = await this.#archive(name, entry);
+    cache.set(key, sources);
+    return sources;
+  }
+
+  /**
+   * Download one version's archive and read the sources out of it.
+   *
+   * In order: the signing call, which is bearer-authorized and answers a GET
+   * good for five minutes; the download, which carries nothing; the DIGEST,
+   * checked against what the registry published before a single byte is
+   * decompressed, let alone parsed; then gunzip and tar.
+   *
+   * What comes back is the shape a sources document gives: every recipe the
+   * detail entry lists, keyed by name and read from the member its `file`
+   * names; the manifest, every `.sql`, the readme and the licence as `files`;
+   * and the manifest parsed. Anything else in the archive is left in it.
+   */
+  async #archive(name: string, entry: VersionEntry): Promise<Sources> {
+    const url = `${this.apiUrl}/archive/${entry.sha256}`;
+    let answer: Record<string, unknown>;
+    try {
+      answer = await callJson(this.#fetch, url, { token: this.#token });
+    } catch (error) {
+      const status = error instanceof FfrwdError ? error.status : 0;
+      if (status === 401 || status === 403) {
+        throw new FfrwdError({
+          status,
+          error: `this token does not authorize downloading '${name}' ${entry.version}`,
+          hint: NAMESPACE_HINT,
+        });
+      }
+      throw error;
+    }
+    const signed = requiredString(answer, "url", url);
+    const response = await request(this.#fetch, signed);
+    if (!response.ok) {
+      throw new FfrwdError({
+        status: response.status,
+        error:
+          `the signed url for '${name}' ${entry.version} answered HTTP ${response.status}`,
+        hint: "a signed url is good for five minutes; ask for another",
+      });
+    }
+    const raw = new Uint8Array(await response.arrayBuffer());
+    if (raw.byteLength > MAX_ARCHIVE_BYTES) {
+      throw refuse(
+        `the archive of '${name}' ${entry.version} is more than ${MAX_ARCHIVE_BYTES} bytes`,
+        "this client reads an archive in memory; that one is for the CLI to install",
+      );
+    }
+    const digest = await sha256Hex(raw);
+    if (digest !== entry.sha256) {
+      throw refuse(
+        `the archive downloaded for '${name}' ${entry.version} hashes to ${digest}, ` +
+          `not the ${entry.sha256} the registry published`,
+        "nothing was read out of it; the download is not what this version published",
+      );
+    }
+    const what = `${name} ${entry.version}`;
+    const members = readTar(await gunzip(raw, what), what);
+    const files: Record<string, string> = {};
+    for (const [path, bytes] of members) {
+      if (isPublishedText(path)) files[path] = asText(bytes);
+    }
+    const recipes: Record<string, string> = {};
+    for (const one of entry.recipes ?? []) {
+      if (typeof one?.name !== "string" || typeof one.file !== "string") continue;
+      const held = members.get(one.file);
+      if (held !== undefined) recipes[one.name] = asText(held);
+    }
+    const manifest = files["ffrwd.json"];
+    return {
+      name,
+      version: entry.version,
+      sha256: entry.sha256,
+      recipes,
+      files,
+      manifest:
+        typeof manifest === "string" ? parseManifest(manifest, name, entry.version) : null,
+    };
+  }
+
+  /**
+   * One version's manifest, or null when nothing readable publishes one.
+   *
+   * The sources document's entry decides, and an entry that carries no
+   * `ffrwd.json` is a package that depends on nothing -- no archive is
+   * downloaded for it. Only a version the document has NO entry for goes to the
+   * archive, and only with a token: that is the private case, and it is the
+   * only one a resolve pays for.
+   */
   async #manifest(
     name: string,
     version: string,
@@ -356,9 +652,13 @@ export class Registry {
   ): Promise<Manifest | null> {
     const document = await this.#sourcesDocument(name, cache);
     const entry = (document?.versions ?? []).find((one) => one.version === version);
-    const text = entry?.files?.["ffrwd.json"];
-    if (typeof text !== "string") return null;
-    return parseManifest(text, name, version);
+    if (entry !== undefined) {
+      const text = entry.files?.["ffrwd.json"];
+      if (typeof text !== "string") return null;
+      return parseManifest(text, name, version);
+    }
+    if (this.#token === undefined) return null;
+    return (await this.#fromArchive(name, version, cache)).manifest;
   }
 
   #sourcesOf(
@@ -476,18 +776,7 @@ function parseManifest(text: string, name: string, version: string): Manifest {
   }
 }
 
-async function readDocument(
-  response: Response,
-  url: string,
-): Promise<Record<string, unknown>> {
-  const text = await response.text();
-  if (!response.ok) {
-    throw new FfrwdError({
-      status: response.status,
-      error: `the index refused ${url} with HTTP ${response.status}`,
-      hint: "the index is public; try again, or check the index url",
-    });
-  }
+function readObject(text: string, url: string): Record<string, unknown> {
   let data: unknown;
   try {
     data = JSON.parse(text);
