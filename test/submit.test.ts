@@ -1,3 +1,4 @@
+import { CLIENT_VERSION } from "../src/jobs.js";
 /**
  * The submit sequence: what goes out, in what order, carrying what -- and what
  * is refused before a single byte is sent.
@@ -89,7 +90,7 @@ describe("submit", () => {
     expect(body["recipe"]).toBe(null);
     expect(body["timeout_s"]).toBe(120);
     expect(body["title"]).toBe("a test");
-    expect(body["client_version"]).toBe("ffrwd-js/0.1.0");
+    expect(body["client_version"]).toBe(CLIENT_VERSION);
 
     // 2. the upload: to the url signed for the input's index, and the url is
     // the whole credential
