@@ -48,7 +48,7 @@ import { declaredVariables, substitute, unsetVariable } from "./vars.js";
 export const JOB_FORMAT_VERSION = 2;
 
 /** What this client calls itself to the API when the caller names nothing. */
-export const CLIENT_VERSION = "ffrwd-js/0.1.0";
+export const CLIENT_VERSION = "ffrwd-js/0.3.0";
 
 /** How often `wait` asks, when the caller does not say. */
 export const DEFAULT_POLL_MS = 3000;
